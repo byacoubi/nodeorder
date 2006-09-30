@@ -1,0 +1,57 @@
+<?php
+// $Id$
+
+/**
+ * Implementation of hook_install()
+ *
+ * This will automatically install the MySQL database tables for nodeorder.
+ * If you are using another database, you will have to install the tables
+ * by hand, using the queries below as a reference.
+ *
+ * Note that the curly braces around table names are a drupal-specific
+ * feature to allow for automatic database table prefixing, and will
+ * need to be removed.
+ *
+ * TODO: Create pgsql queries.
+ *
+ */
+function nodeorder_install() {
+  $module_name = 'nodeorder';
+  
+  switch ($GLOBALS['db_type']) {
+    case 'mysqli':
+    case 'mysql':
+
+      // We add an extra column (weight_in_tid) to the term_node table that will
+      // be used in determining the order of nodes in taxonomy listings.  The
+      // value will initially be set to the node's nid so that it will be unique.
+      // Then, within any tid, the weight_in_tid values can move around between
+      // nodes to maintain the uniqueness.
+      $query[] = db_query("
+        ALTER TABLE {term_node} ADD COLUMN weight_in_tid int(10) unsigned NOT NULL default '0'
+      ");
+      
+      // If any of the queries failed, then there's a problem...
+      $created = !in_array(FALSE, $query);
+      break;
+      
+    case 'pgsql':
+      break;
+      
+    default:
+      break;
+  }
+  
+  if ($created) {
+    // Set the weight of the nodeorder module in the system table
+    // so that we come after most other modules in module_invoke_all()
+    // calls.  This ensures that we can alter forms after, for instance,
+    // the taxonomy module...
+    $query[] = db_query("UPDATE {system} SET weight = 5 WHERE name = 'nodeorder' AND type = 'module'");
+    
+    drupal_set_message(t('The %name module installed successfully.', array('%name' => $module_name)));
+  }
+  else {
+    drupal_set_message(t('Table installation for the %name module was unsuccessful. The tables may need to be installed by hand.  See %name.install file for a list of the installation queries.', array('%name' => $module_name)), 'error');
+  }
+}

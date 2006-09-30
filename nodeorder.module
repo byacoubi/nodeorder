@@ -1,0 +1,295 @@
+<?php
+// $Id$
+
+/**
+ * Implementation of hook_perm().
+ */
+function nodeorder_perm() {
+  return array(
+    'order nodes within categories'
+  );
+}
+
+/**
+ * Implementation of hook_help().
+ */
+function nodeorder_help($section) {
+  switch ($section) {
+    case 'admin/modules#description':
+      // This description is shown in the listing at admin/modules.
+      return t('Allows the ordering of nodes within taxonomy terms.');
+  }
+}
+
+/**
+ * Implementation of hook_form_alter().
+ */
+function nodeorder_form_alter($form_id, &$form) {
+  if ($form_id == 'taxonomy_form_vocabulary') {
+    $is_orderable = $form['module']['#value'] == 'nodeorder';
+    
+    $form['orderable'] = array('#type' => 'checkbox',
+      '#title' => t('Orderable'),
+      '#description' => t('If enabled, nodes may be ordered within this vocabulary.'),
+      '#weight' => 0.0085, // Try to have this show up after the 'Required' checkbox
+      '#default_value' => $is_orderable
+    );
+    
+    $form['#submit']['nodeorder_taxonomy_form_vocabulary_submit'] = array();
+  }
+}
+
+/**
+ * Accept the form submission for a vocabulary and save the results.
+ */
+function nodeorder_taxonomy_form_vocabulary_submit($form_id, $form_values) {
+  $vid = $form_values['vid'];
+  
+  if ($form_values['orderable']) {
+    if ($form_values['module'] != 'nodeorder') {
+      // Switching from non-orderable to orderable...
+      
+      // Set weight_in_tid to nid for all rows in term_node where
+      // weight_in_tid is 0 and the tid is in this vocabulary...
+      $tree = taxonomy_get_tree($vid);
+      foreach ($tree as $term) {
+        $terms[] = $term->tid;
+      }
+      
+      $in_terms = implode(",", $terms);
+      
+      db_query("UPDATE {term_node} SET weight_in_tid = nid WHERE weight_in_tid = 0 AND tid IN (" . $in_terms . ")");
+      db_query("UPDATE {vocabulary} SET module = '%s' WHERE vid = %d", 'nodeorder', $vid);
+
+      drupal_set_message(t('You may now order nodes within this vocabulary.'));
+    }
+  }
+  else {
+    if ($form_values['module'] == 'nodeorder') {
+      // Switching from orderable to non-orderable...
+      db_query("UPDATE {vocabulary} SET module = '%s' WHERE vid = %d", 'taxonomy', $vid);
+      drupal_set_message(t('You may no longer order nodes within this vocabulary.'));
+    }
+  }
+}
+
+/**
+ * Implementation of hook_link().
+ */
+function nodeorder_link($type, $node = 0, $main = 0) {
+  $links = array();
+
+  if (user_access('order nodes within categories')) {
+    // If this node belongs to any vocabularies that are orderable,
+    // stick a couple links on per term to allow the user to move
+    // the node up or down within the term...
+    if ($type == 'node') {
+      if (array_key_exists('taxonomy', $node)) {
+        foreach ($node->taxonomy as $term) {
+          $vocabulary = taxonomy_get_vocabulary($term->vid);
+          if ($vocabulary->module == 'nodeorder') {
+            $links[] = l(t('move up in %category', array('%category' => $term->name)), "nodeorder/moveup/$node->nid/$term->tid", array('title' => t('Move this %nodetype up in its category.', array('%nodetype' => $node->type)), 'class' => 'rubric-pe-move'), 'destination=' . $_GET['q']);
+            $links[] = l(t('move down in %category', array('%category' => $term->name)), "nodeorder/movedown/$node->nid/$term->tid", array('title' => t('Move this %nodetype down in its category.', array('%nodetype' => $node->type)), 'class' => 'rubric-pe-move'), 'destination=' . $_GET['q']);
+          }
+        }
+      }
+    }
+  }
+
+  return $links;
+}
+
+/**
+ * Implementation of hook_term_path() from Taxonomy.
+ */
+function nodeorder_term_path($term) {
+  return 'nodeorder/term/'. $term->tid;
+}
+
+/**
+ * Menu callback; displays all nodes associated with a term.
+ */
+function nodeorder_term_page($str_tids = '', $depth = 0, $op = 'page') {
+  if (preg_match('/^([0-9]+[+ ])+[0-9]+$/', $str_tids)) {
+    $operator = 'or';
+    // The '+' character in a query string may be parsed as ' '.
+    $tids = preg_split('/[+ ]/', $str_tids);
+  }
+  else if (preg_match('/^([0-9]+,)*[0-9]+$/', $str_tids)) {
+    $operator = 'and';
+    $tids = explode(',', $str_tids);
+  }
+  else {
+    drupal_not_found();
+  }
+
+  if ($tids) {
+    $result = db_query(db_rewrite_sql('SELECT t.tid, t.name FROM {term_data} t WHERE t.tid IN (%s)', 't', 'tid'), implode(',', $tids));
+    $tids = array(); // we rebuild the $tids-array so it only contains terms the user has access to.
+    $names = array();
+    while ($term = db_fetch_object($result)) {
+      $tids[] = $term->tid;
+      $names[] = $term->name;
+    }
+
+    if ($names) {
+      drupal_set_title($title = check_plain(implode(', ', $names)));
+      
+      // Set the order that gets passed in to taxonomy_select_nodes.
+      // This probably breaks down when there's a query that spans
+      // multiple terms...
+      //
+      // First sort by sticky, then by weight_in_tid...
+      $order = 'n.sticky DESC, tn0.weight_in_tid';
+      
+      switch ($op) {
+        case 'page':
+          drupal_add_link(array('rel' => 'alternate',
+                                'type' => 'application/rss+xml',
+                                'title' => 'RSS - '. $title,
+                                'href' => url('taxonomy/term/'. $str_tids .'/'. $depth .'/feed')));
+
+          $output = taxonomy_render_nodes(taxonomy_select_nodes($tids, $operator, $depth, TRUE, $order));
+          $output .= theme('feed_icon', url('taxonomy/term/'. $str_tids .'/'. $depth .'/feed'));
+          return $output;
+          break;
+
+        case 'feed':
+          $term = taxonomy_get_term($tids[0]);
+          $channel['link'] = url('taxonomy/term/'. $str_tids .'/'. $depth, NULL, NULL, TRUE);
+          $channel['title'] = variable_get('site_name', 'drupal') .' - '. $title;
+          $channel['description'] = $term->description;
+
+          $result = taxonomy_select_nodes($tids, $operator, $depth, FALSE, $order);
+          node_feed($result, $channel);
+          break;
+        default:
+          drupal_not_found();
+      }
+    }
+    else {
+      drupal_not_found();
+    }
+  }
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function nodeorder_menu($may_cache) {
+  $items = array();
+
+  if ($may_cache) {
+    $items[] = array('path' => 'nodeorder/term',
+      'title' => t('nodeorder term'),
+      'callback' => 'nodeorder_term_page', // I want to call taxonomy_term_page but can't change the sort order...
+      'access' => user_access('access content'),
+      'type' => MENU_CALLBACK);
+  } else if (arg(0) == 'nodeorder' && (arg(1) == 'moveup' || arg(1) == 'movedown') && is_numeric(arg(2)) && is_numeric(arg(3))) {
+      $node = node_load(arg(2));
+            
+      $items[] = array('path' => 'nodeorder/moveup/' . $node->nid,
+        'title' => t('Move Up'),
+        'callback' => 'nodeorder_move_in_category',
+        'callback arguments' => array($node, arg(3), true),
+        'access' => user_access('order nodes within categories'),
+        'type' => MENU_CALLBACK);
+            
+      $items[] = array('path' => 'nodeorder/movedown/' . $node->nid,
+        'title' => t('Move Down'),
+        'callback' => 'nodeorder_move_in_category',
+        'callback arguments' => array($node, arg(3), false),
+        'access' => user_access('order nodes within categories'),
+        'type' => MENU_CALLBACK);
+  }
+
+  return $items;
+}
+
+/**
+ * Move a node up or down in its category...
+ */
+function nodeorder_move_in_category(&$node, $tid, $up) {
+  // Note that it would be nice to wrap this in a transaction...
+  
+  // We rely on the fact that every node has a unique weight_in_tid
+  // (initially equal to negative one times its nid)...
+  if ($up) {
+    $sql = "SELECT nid, weight_in_tid FROM {term_node} WHERE tid = %d AND weight_in_tid <= (SELECT weight_in_tid FROM {term_node} WHERE nid = %d AND tid = %d) ORDER BY weight_in_tid DESC LIMIT 2";
+    $direction = 'up';
+  }
+  else {
+    $sql = "SELECT nid, weight_in_tid FROM {term_node} WHERE tid = %d AND weight_in_tid >= (SELECT weight_in_tid FROM {term_node} WHERE nid = %d AND tid = %d) ORDER BY weight_in_tid LIMIT 2";
+    $direction = 'down';
+  }
+  
+  $result = db_query($sql, $tid, $node->nid, $tid);
+  
+  // Now we just need to swap the weights of the two nodes...
+  if (db_num_rows($result) != 2) {
+    drupal_set_message('There was a problem moving the node within its category.');
+    drupal_access_denied();
+    return;
+  }
+  
+  $node1 = db_fetch_object($result);
+  $node2 = db_fetch_object($result);
+  
+  $sql = "UPDATE {term_node} SET weight_in_tid = %d WHERE nid = %d AND tid = %d";
+  
+  db_query($sql, $node1->weight_in_tid, $node2->nid, $tid);
+  db_query($sql, $node2->weight_in_tid, $node1->nid, $tid);
+
+  $term = taxonomy_get_term($tid);
+  drupal_set_message(t("<em>%title</em> was moved $direction in %category...", array('%title' => $node->title, '%category' => $term->name)));
+  
+  // Now send user to the page they were on before...
+  drupal_goto($_GET['destination']);
+}
+
+/**
+ * Returns TRUE if the node has terms in any orderable vocabulary...
+ */
+function nodeorder_can_be_ordered($node) {
+  $sql = "SELECT v.vid AS vid FROM {vocabulary_node_types} vnt JOIN {vocabulary} v ON vnt.vid = v.vid WHERE vnt.type = '%s' AND v.module = 'nodeorder'";
+  $result = db_query($sql, $node->type);
+  
+  if (db_num_rows($result)) {
+    return TRUE;
+  }
+  
+  return FALSE;
+}
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function nodeorder_nodeapi($node, $op, $arg = 0) {
+  if (nodeorder_can_be_ordered($node)) {    
+    switch ($op) {
+      case 'load':
+        // When a node gets loaded, store an element called 'nodeorder' that contains
+        // an associative array of tid to weight_in_tid...
+        $output['nodeorder'] = array();
+        $result = db_query('SELECT tid, weight_in_tid FROM {term_node} WHERE nid = %d', $node->nid);
+        while ($term_node = db_fetch_object($result)) {
+          $output['nodeorder'][$term_node->tid] = $term_node->weight_in_tid;
+        }
+        return $output;
+      case 'insert':
+        // Set the initial weight_in_tid to the node's nid...
+        $sql = "UPDATE {term_node} SET weight_in_tid = %d WHERE nid = %d";
+        db_query($sql, $node->nid, $node->nid);
+        break;
+      case 'update':
+        // Set the weight_in_tid -- taxonomy probably stomped it because
+        // we added the weight_in_tid column to term_node, and taxonomy
+        // just wants to delete and re-insert rows when things change...
+        foreach($node->nodeorder as $tid => $weight_in_tid) {
+          $sql = "UPDATE {term_node} SET weight_in_tid = %d WHERE nid = %d AND tid = %d";
+          db_query($sql, $weight_in_tid, $node->nid, $tid);
+        }
+        break;
+    }
+  }
+}
