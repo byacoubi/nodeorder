@@ -1,39 +1,42 @@
 *******************************************************
     README.txt for nodeorder.module for Drupal
 *******************************************************
+The nodeorder module gives users an easy way to order nodes within their
+taxonomy terms.
 
-This module was developed Funny Monkey to give users an easy way to
-order nodes within their taxonomy terms.
+By default, the taxonomy module orders listings of nodes by stickiness and
+then by node creation date -- most recently posted nodes come first.
 
-By default, the taxonomy module orders listings of nodes by stickiness
-and then by node creation date -- most recently posted nodes come first.
+The nodeorder module gives the user the ability to put nodes in any order they
+wish within each category that the node lives.
 
-The nodeorder module gives the user the ability to put nodes in any
-order they wish within each category that the node lives.
+There are two ways that a user can order nodes within a category.  The first
+is to use the "move up" and "move down" links that can be configured to appear
+on each node (especially useful when looking at lists of taxonomy terms).  The
+second is to use drag and drop, which appears on the administrative listings
+of nodes in a category.
 
-INSTALLATION:
+To install the nodeorder module:
 
-Put the nodeorder directory in your modules directory.
-Enable it via admin/modules.
+- Put the nodeorder directory in your modules directory.
+- Navigate to administer --> modules, and enable the nodeorder module.
+- Navigate to administer --> access control, and assign one or more roles
+the right to "order nodes within categories."
+- You may turn on "orderability" on a per-vocabulary basis by visiting your
+vocabularies' administration pages (admin/taxonomy).  This module adds a
+checkbox on the "edit vocabulary" page titled "Orderable" -- it defaults to
+being unchecked.  After checking this box and saving your changes, you'll be
+able to order nodes that are classified in this category.
 
-CONFIGURATION:
-
-You may turn on "orderability" on a per-vocabulary basis by visiting
-your vocabularies' administration pages (admin/taxonomy).  This module
-adds a checkbox on the "edit vocabulary" page titled "Orderable" -- it
-defaults to being unchecked.  After checking this box and saving your
-changes, you'll be able to order nodes that are classified in this
-category.
-
-You will also need to visit admin/access to give any roles rights to
-"order nodes within categories".
-
-USAGE:
-
-Users with the ability to "order nodes within categories" will see a
-link attached to every node that is classified in an orderable
-vocabulary.  There is a "move up" and a "move down" link for each
-term in the vocabulary that the node lives in.
+- In order to use drag and drop node ordering feature, install the
+<a href="http://drupal.org/project/spajax">S/P Ajax</a> module.  Follow the
+S/P Ajax installation instructions and test S/P Ajax to make sure it's
+working.  S/P Ajax will ask you to install
+<a href="http://script.aculo.us/downloads">Scriptaculous</a> -- it might
+sound daunting, but it's actually pretty simple.
+- To use drag and drop node ordering, you will find a tab called "order
+nodes" on any admin/taxonomy/VID pages where the vocabulary has been set to
+orderable.
 
 TECHNICAL NOTES:
 
@@ -50,6 +53,4 @@ module implements hook_term_path, the taxonomy links that get printed
 per node will correctly point to the "nodeorder" space when they are in
 orderable vocabularies.
 
-TO DO:
-
-1. Need a better UI for moving nodes within their categories -- AJAX...
+The nodeorder module was developed by FunnyMonkey.
