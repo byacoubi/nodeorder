@@ -1,0 +1,12 @@
+/* $Id$ */
+
+#node-sort-list div.node {
+  border-style: solid;
+  border-width: 1px;
+}
+
+#node-sort-list div.node .title {
+  background: #ffefff;
+  border-bottom-style: solid;
+  border-bottom-width: 1px;
+}
