@@ -11,3 +11,7 @@
   border-bottom-width: 1px;
   cursor: move;
 }
+
+.sort-wrapper div.node-shell {
+  margin-bottom: 1px;
+}

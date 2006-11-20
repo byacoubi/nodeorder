@@ -38,6 +38,9 @@ sound daunting, but it's actually pretty simple.
 nodes" on any admin/taxonomy/VID pages where the vocabulary has been set to
 orderable.
 
+- Navigate to administer --> settings --> nodeorder, where you can set
+some options that determine the way nodeorder works.
+
 TECHNICAL NOTES:
 
 Upon installation, this module adds a new column (weight_in_tid) to the

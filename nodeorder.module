@@ -203,7 +203,20 @@ function nodeorder_order_nodes($tid) {
     $output = "<div id=\"node-sort-list\">\n";
     while ($node = db_fetch_object($result)) {
       $loaded_node = node_load($node->nid);
-      $output .= "<div id=\"node_$node->nid\" class=\"sort-wrapper\">\n" . node_view($loaded_node, 1) . "</div>\n";
+    
+      $output .= "<div id=\"node_$node->nid\" class=\"sort-wrapper\">\n";
+
+      $title_only_while_ordering =  variable_get('nodeorder_minimal_ordering_text', 0);
+      
+      if ($title_only_while_ordering) {
+        $output .= "<div class=\"node node-shell\"><h2 class=\"title\">" . l($loaded_node->title, "node/$loaded_node->nid") . "</h2></div>\n";
+      }
+      else {
+        $output .= node_view($loaded_node, 1);
+      }
+      
+      $output .= "</div>\n";
+      
       $nids[] = $node->nid;
       $weights[] = $loaded_node->nodeorder[$tid];
     }
@@ -332,16 +345,18 @@ function nodeorder_move_in_category(&$node, $tid, $up) {
   
   // We rely on the fact that every node has a unique weight_in_tid
   // (initially equal to negative one times its nid)...
+  $weight = db_result(db_query("SELECT weight_in_tid FROM {term_node} WHERE nid = %d AND tid = %d", $node->nid, $tid));
+
   if ($up) {
-    $sql = "SELECT nid, weight_in_tid FROM {term_node} WHERE tid = %d AND weight_in_tid <= (SELECT weight_in_tid FROM {term_node} WHERE nid = %d AND tid = %d) ORDER BY weight_in_tid DESC LIMIT 2";
+    $sql = "SELECT nid, weight_in_tid FROM {term_node} WHERE tid = %d AND weight_in_tid <= %d ORDER BY weight_in_tid DESC LIMIT 2";
     $direction = 'up';
   }
   else {
-    $sql = "SELECT nid, weight_in_tid FROM {term_node} WHERE tid = %d AND weight_in_tid >= (SELECT weight_in_tid FROM {term_node} WHERE nid = %d AND tid = %d) ORDER BY weight_in_tid LIMIT 2";
+    $sql = "SELECT nid, weight_in_tid FROM {term_node} WHERE tid = %d AND weight_in_tid >= %d ORDER BY weight_in_tid LIMIT 2";
     $direction = 'down';
   }
-  
-  $result = db_query($sql, $tid, $node->nid, $tid);
+
+  $result = db_query($sql, $tid, $weight);
   
   // Now we just need to swap the weights of the two nodes...
   if (db_num_rows($result) != 2) {
@@ -430,6 +445,9 @@ function theme_nodeorder_order_icon($path, $name) {
   return '<div id="nodeorder-icon">' . l(t('Set the order of nodes in %term', array('%term' => $name)), $path) . "</div>\n";
 }
 
+/**
+ * Implementation of hook_settings().
+ */
 function nodeorder_settings() {
   $form['nodeorder_show_links_on_node'] = array('#type' => 'checkbox',
     '#title' => t('Display ordering links on each node'),
@@ -441,6 +459,12 @@ function nodeorder_settings() {
     '#title' => t('Display link to the ordering page'),
     '#description' => t('If enabled, a link will appear on all nodeorder/TID pages that quickly allows administrators to get to the node ordering administration page for the term.'),
     '#default_value' => variable_get('nodeorder_link_to_ordering_page', 1)
+  );
+ 
+  $form['nodeorder_minimal_ordering_text'] = array('#type' => 'checkbox',
+    '#title' => t('Only show titles when ordering nodes'),
+    '#description' => t('If enabled, only titles will be shown when ordering nodes within a category.  This allows you to see more nodes in a smaller amount of space.  It has no effect on the display of the same nodes in any other context.'),
+    '#default_value' => variable_get('nodeorder_minimal_ordering_text', 0)
   );
   
   return $form;
