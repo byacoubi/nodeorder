@@ -518,3 +518,44 @@ function nodeorder_overview_terms($vid) {
 
   return theme('table', $header, $rows, array('id' => 'taxonomy'));
 }
+
+
+
+/**
+ * Views integration...
+ */
+function nodeorder_views_tables() {
+  $vocabularies = taxonomy_get_vocabularies();
+  foreach ($vocabularies as $voc) {
+    $tables["term_node_$voc->vid"] = array(
+      'name' => 'term_node',
+      'provider' => 'internal',
+      'join' => array(
+        'left' => array(
+          'table' => 'node',
+          'field' => 'nid'
+        ),
+        'right' => array(
+          'field' => 'nid'
+        )
+      ),
+      'sorts' => array(
+        'weight' => array(
+          'name' => t('Nodeorder: Order of nodes in %voc', array('%voc' => $voc->name)),
+          'field' => array('weight_in_tid'),
+          'help' => t('This will sort nodes by taxonomy node order, as defined by the nodeorder module.'),
+        )
+      ), 
+    );
+  }
+
+  return $tables;
+}
+
+function nodeorder_views_arguments() {
+
+}
+
+function nodeorder_views_default_views() {
+
+}
