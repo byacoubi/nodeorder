@@ -52,13 +52,18 @@ function nodeorder_taxonomy_form_vocabulary_submit($form_id, $form_values) {
       // Set weight_in_tid to nid for all rows in term_node where
       // weight_in_tid is 0 and the tid is in this vocabulary...
       $tree = taxonomy_get_tree($vid);
+      
+      $terms = array();
+      
       foreach ($tree as $term) {
         $terms[] = $term->tid;
       }
       
-      $in_terms = implode(",", $terms);
+      if (count($terms) > 0) {
+        $in_terms = implode(',', $terms);
+        db_query("UPDATE {term_node} SET weight_in_tid = nid WHERE weight_in_tid = 0 AND tid IN (" . $in_terms . ")");
+      }
       
-      db_query("UPDATE {term_node} SET weight_in_tid = nid WHERE weight_in_tid = 0 AND tid IN (" . $in_terms . ")");
       db_query("UPDATE {vocabulary} SET module = '%s' WHERE vid = %d", 'nodeorder', $vid);
 
       drupal_set_message(t('You may now order nodes within this vocabulary.'));
@@ -424,7 +429,9 @@ function nodeorder_nodeapi($node, $op, $arg = 0) {
         }
         return $output;
       case 'insert':
-        // Set the initial weight_in_tid to the node's nid...
+        // Set the initial weight_in_tid to the node's nid...  Since this is a
+        // new node, it is fine to set all the nid/tid combinations' weight_in_tid
+        // to the same initial value.
         $sql = "UPDATE {term_node} SET weight_in_tid = %d WHERE nid = %d";
         db_query($sql, $node->nid, $node->nid);
         break;
@@ -432,6 +439,14 @@ function nodeorder_nodeapi($node, $op, $arg = 0) {
         // Set the weight_in_tid -- taxonomy probably stomped it because
         // we added the weight_in_tid column to term_node, and taxonomy
         // just wants to delete and re-insert rows when things change...
+        //
+        // We start out by setting all the weight_in_tid values to the nid
+        // because there may have been some additional tids for this node,
+        // and their weight_in_tid values won't have been saved in $node->nodeorder...
+        $sql = "UPDATE {term_node} SET weight_in_tid = %d WHERE nid = %d";
+        db_query($sql, $node->nid, $node->nid);
+
+        // Now we can restore any saved weight_in_tid values...
         foreach($node->nodeorder as $tid => $weight_in_tid) {
           $sql = "UPDATE {term_node} SET weight_in_tid = %d WHERE nid = %d AND tid = %d";
           db_query($sql, $weight_in_tid, $node->nid, $tid);
