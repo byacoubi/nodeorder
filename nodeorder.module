@@ -50,18 +50,17 @@ function nodeorder_taxonomy_form_vocabulary_submit($form_id, $form_values) {
       // Switching from non-orderable to orderable...
       
       // Set weight_in_tid to nid for all rows in term_node where
-      // weight_in_tid is 0 and the tid is in this vocabulary...
+      // the tid is in this vocabulary...
       $tree = taxonomy_get_tree($vid);
       
-      $terms = array();
+      $tids = array();
       
       foreach ($tree as $term) {
-        $terms[] = $term->tid;
+        $tids[] = $term->tid;
       }
       
-      if (count($terms) > 0) {
-        $in_terms = implode(',', $terms);
-        db_query("UPDATE {term_node} SET weight_in_tid = nid WHERE weight_in_tid = 0 AND tid IN (" . $in_terms . ")");
+      if (count($tids) > 0) {
+        db_query("UPDATE {term_node} SET weight_in_tid = nid WHERE tid IN (" . implode(',', $tids) . ")");
       }
       
       db_query("UPDATE {vocabulary} SET module = '%s' WHERE vid = %d", 'nodeorder', $vid);
@@ -73,6 +72,21 @@ function nodeorder_taxonomy_form_vocabulary_submit($form_id, $form_values) {
     if ($form_values['module'] == 'nodeorder') {
       // Switching from orderable to non-orderable...
       db_query("UPDATE {vocabulary} SET module = '%s' WHERE vid = %d", 'taxonomy', $vid);
+      
+      // Set weight_in_tid to 0 for all rows in term_node where
+      // the tid is in this vocabulary...
+      $tree = taxonomy_get_tree($vid);
+      
+      $tids = array();
+      
+      foreach ($tree as $term) {
+        $tids[] = $term->tid;
+      }
+      
+      if (count($tids) > 0) {
+        db_query("UPDATE {term_node} SET weight_in_tid = 0 WHERE tid IN (" . implode(',', $tids) . ")");
+      }
+      
       drupal_set_message(t('You may no longer order nodes within this vocabulary.'));
     }
   }
@@ -194,6 +208,87 @@ function nodeorder_term_page($str_tids = '', $depth = 0, $op = 'page') {
   }
 }
 
+/**
+ * NOTE: This is nearly a direct copy of taxonomy_select_nodes() -- see
+ *       http://drupal.org/node/25801 if you find this sort of copy and
+ *       paste upsetting...
+ * 
+ * Finds all nodes that match selected taxonomy conditions.
+ *
+ * @param $tids
+ *   An array of term IDs to match.
+ * @param $operator
+ *   How to interpret multiple IDs in the array. Can be "or" or "and".
+ * @param $depth
+ *   How many levels deep to traverse the taxonomy tree. Can be a nonnegative
+ *   integer or "all".
+ * @param $pager
+ *   Whether the nodes are to be used with a pager (the case on most Drupal
+ *   pages) or not (in an XML feed, for example).
+ * @param $order
+ *   The order clause for the query that retrieve the nodes.
+ * @param $count
+ *   If $pager is TRUE, the number of nodes per page, or -1 to use the
+ *   backward-compatible 'default_nodes_main' variable setting.  If $pager
+ *   is FALSE, the total number of nodes to select; or -1 to use the
+ *   backward-compatible 'feed_default_items' variable setting; or 0 to
+ *   select all nodes.
+ * @return
+ *   A resource identifier pointing to the query results.
+ */
+function nodeorder_select_nodes($tids = array(), $operator = 'or', $depth = 0, $pager = TRUE, $order = 'n.sticky DESC, n.created DESC', $count = -1) {
+  if (count($tids) > 0) {
+    // For each term ID, generate an array of descendant term IDs to the right depth.
+    $descendant_tids = array();
+    if ($depth === 'all') {
+      $depth = NULL;
+    }
+    foreach ($tids as $index => $tid) {
+      $term = taxonomy_get_term($tid);
+      $tree = taxonomy_get_tree($term->vid, $tid, -1, $depth);
+      $descendant_tids[] = array_merge(array($tid), array_map('_taxonomy_get_tid_from_term', $tree));
+    }
+
+    if ($operator == 'or') {
+      $str_tids = implode(',', call_user_func_array('array_merge', $descendant_tids));
+      $sql = 'SELECT DISTINCT(n.nid), n.sticky, n.title, n.created FROM {node} n INNER JOIN {term_node} tn ON n.nid = tn.nid WHERE tn.tid IN ('. $str_tids .') AND n.status = 1 ORDER BY '. $order;
+      $sql_count = 'SELECT COUNT(DISTINCT(n.nid)) FROM {node} n INNER JOIN {term_node} tn ON n.nid = tn.nid WHERE tn.tid IN ('. $str_tids .') AND n.status = 1';
+    }
+    else {
+      $joins = '';
+      $wheres = '';
+      foreach ($descendant_tids as $index => $tids) {
+        $joins .= ' INNER JOIN {term_node} tn'. $index .' ON n.nid = tn'. $index .'.nid';
+        $wheres .= ' AND tn'. $index .'.tid IN ('. implode(',', $tids) .')';
+      }
+      $sql = 'SELECT DISTINCT(n.nid), n.sticky, n.title, n.created FROM {node} n '. $joins .' WHERE n.status = 1 '. $wheres .' ORDER BY '. $order;
+      $sql_count = 'SELECT COUNT(DISTINCT(n.nid)) FROM {node} n '. $joins .' WHERE n.status = 1 ' . $wheres;
+    }
+    $sql = db_rewrite_sql($sql);
+    $sql_count = db_rewrite_sql($sql_count);
+    if ($pager) {
+      if ($count == -1) {
+        $count = variable_get('default_nodes_main', 10);
+      }
+      $result = pager_query($sql, $count, 0, $sql_count);
+    }
+    else {
+      if ($count == -1) {
+        $count = variable_get('feed_default_items', 10);
+      }
+      
+      if ($count == 0) {
+        $result = db_query($sql);
+      }
+      else {
+        $result = db_query_range($sql, 0, $count);
+      }
+    }
+  }
+
+  return $result;
+}
+
 function nodeorder_order_nodes($tid) {
   // We need the Scriptaculous and spajax CSS and JS...
   spajax_head();
@@ -202,8 +297,14 @@ function nodeorder_order_nodes($tid) {
   
   $nids = array();
   $items = array();
+  
   $order = 'n.sticky DESC, tn0.weight_in_tid';
-  $result = taxonomy_select_nodes(array($tid), 'and', 0, FALSE, $order);
+  
+  // Send 0 in as the count to nodeorder_select_nodes, which tells
+  // it to put all the nodes (as opposed to some preconfigured number
+  // of nodes) in the result set...
+  $count = 0;
+  $result = nodeorder_select_nodes(array($tid), 'and', 0, FALSE, $order, $count);
   if (db_num_rows($result) > 0) {
     $output = "<div id=\"node-sort-list\">\n";
     while ($node = db_fetch_object($result)) {
@@ -232,7 +333,10 @@ function nodeorder_order_nodes($tid) {
     $onUpdate = "function (container) { var tid = $tid; var url = '/nodeorder/reordered'; new Ajax.Request(url, { method: 'post', postBody: Sortable.serialize(container.id)+'&initial-values='+initialValues+'&initial-weights='+initialWeights+'&tid='+tid } ); initialValues = Sortable.sequence(container.id); }";
     
     // Tell the Sortable that the child elements are DIVs with class="sort-wrapper"...
-    $options = array('tag' => 'div', 'only' => 'sort-wrapper', 'handle' => 'title', '#onUpdate' => $onUpdate);
+    $options = array('tag' => 'div',
+      'only' => 'sort-wrapper',
+      'handle' => 'title',
+      '#onUpdate' => $onUpdate);
     spajax_sortable_element('node-sort-list', $options);
   }
   
@@ -400,6 +504,25 @@ function nodeorder_can_be_ordered($node) {
 }
 
 /**
+ * Returns an array of the node's tids that are in orderable vocabularies...
+ */
+function nodeorder_orderable_tids($node) {
+  $tids = array();
+  
+  $sql = "SELECT v.vid AS vid FROM {vocabulary_node_types} vnt JOIN {vocabulary} v ON vnt.vid = v.vid WHERE vnt.type = '%s' AND v.module = 'nodeorder'";
+  $result = db_query($sql, $node->type);
+  
+  while ($row = db_fetch_object($result)) {
+    $tree = taxonomy_get_tree($row->vid);
+    foreach ($tree as $term) {
+      $tids[] = $term->tid;
+    }
+  }
+  
+  return $tids;
+}
+
+/**
  * Returns TRUE if the vocabulary is orderable...
  */
 function nodeorder_vocabulary_can_be_ordered($vid) {
@@ -431,10 +554,9 @@ function nodeorder_nodeapi($node, $op, $arg = 0) {
       case 'insert':
         // Set the initial weight_in_tid to the node's nid...  Since this is a
         // new node, it is fine to set all the nid/tid combinations' weight_in_tid
-        // to the same initial value.
-        $sql = "UPDATE {term_node} SET weight_in_tid = %d WHERE nid = %d";
-        db_query($sql, $node->nid, $node->nid);
-        break;
+        // to the same initial value for tids that are in orderable vocabularies.
+        //
+        // NOTE - fall through to 'update' since we do mostly the same thing there...
       case 'update':
         // Set the weight_in_tid -- taxonomy probably stomped it because
         // we added the weight_in_tid column to term_node, and taxonomy
@@ -443,14 +565,24 @@ function nodeorder_nodeapi($node, $op, $arg = 0) {
         // We start out by setting all the weight_in_tid values to the nid
         // because there may have been some additional tids for this node,
         // and their weight_in_tid values won't have been saved in $node->nodeorder...
-        $sql = "UPDATE {term_node} SET weight_in_tid = %d WHERE nid = %d";
-        db_query($sql, $node->nid, $node->nid);
-
-        // Now we can restore any saved weight_in_tid values...
-        foreach($node->nodeorder as $tid => $weight_in_tid) {
-          $sql = "UPDATE {term_node} SET weight_in_tid = %d WHERE nid = %d AND tid = %d";
-          db_query($sql, $weight_in_tid, $node->nid, $tid);
+        //
+        // Note that we only want to set the weight_in_tid for tids that
+        // are in orderable vocabularies...
+        $tids = nodeorder_orderable_tids($node);
+        
+        if (count($tids) > 0) {
+          $sql = "UPDATE {term_node} SET weight_in_tid = %d WHERE nid = %d AND tid IN (" . implode(',', $tids) . ")";
+          db_query($sql, $node->nid, $node->nid);
         }
+
+        // New nodes won't have any saved weight_in_tid values...
+        if ($node->nodeorder) {
+          // Restore any saved weight_in_tid values...
+          foreach($node->nodeorder as $tid => $weight_in_tid) {
+            $sql = "UPDATE {term_node} SET weight_in_tid = %d WHERE nid = %d AND tid = %d";
+            db_query($sql, $weight_in_tid, $node->nid, $tid);
+          }
+        }        
         break;
     }
   }
@@ -532,45 +664,4 @@ function nodeorder_overview_terms($vid) {
   }
 
   return theme('table', $header, $rows, array('id' => 'taxonomy'));
-}
-
-
-
-/**
- * Views integration...
- */
-function nodeorder_views_tables() {
-  $vocabularies = taxonomy_get_vocabularies();
-  foreach ($vocabularies as $voc) {
-    $tables["term_node_$voc->vid"] = array(
-      'name' => 'term_node',
-      'provider' => 'internal',
-      'join' => array(
-        'left' => array(
-          'table' => 'node',
-          'field' => 'nid'
-        ),
-        'right' => array(
-          'field' => 'nid'
-        )
-      ),
-      'sorts' => array(
-        'weight' => array(
-          'name' => t('Nodeorder: Order of nodes in %voc', array('%voc' => $voc->name)),
-          'field' => array('weight_in_tid'),
-          'help' => t('This will sort nodes by taxonomy node order, as defined by the nodeorder module.'),
-        )
-      ), 
-    );
-  }
-
-  return $tables;
-}
-
-function nodeorder_views_arguments() {
-
-}
-
-function nodeorder_views_default_views() {
-
 }
