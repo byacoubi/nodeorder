@@ -29,17 +29,20 @@ being unchecked.  After checking this box and saving your changes, you'll be
 able to order nodes that are classified in this category.
 
 - In order to use drag and drop node ordering feature, install the
-<a href="http://drupal.org/project/spajax">S/P Ajax</a> module.  Follow the
-S/P Ajax installation instructions and test S/P Ajax to make sure it's
-working.  S/P Ajax will ask you to install
-<a href="http://script.aculo.us/downloads">Scriptaculous</a> -- it might
-sound daunting, but it's actually pretty simple.
+<a href="http://drupal.org/project/jquery_update">jQuery Update</a>
+module and the
+<a href="http://drupal.org/project/jquery_interface">jQuery Interface</a>
+module.  Follow those two modules' installation instructions and test
+to make sure they are working.  Installing 
+<a href="http://drupal.org/project/messagefx">Message Effects</a>
+will test jQuery Update and jQuery Interface, so it's not a bad idea to
+install it before installing Nodeorder.
 - To use drag and drop node ordering, you will find a tab called "order
 nodes" on any admin/taxonomy/VID pages where the vocabulary has been set to
 orderable.
 
-- Navigate to administer --> settings --> nodeorder, where you can set
-some options that determine the way nodeorder works.
+- Navigate to admin/settings/nodeorder, where you can set some options
+that determine the way nodeorder works.
 
 TECHNICAL NOTES:
 
