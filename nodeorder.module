@@ -1,6 +1,6 @@
 <?php
 // $Id$
-
+// vim: syntax=php
 /**
  * Implementation of hook_perm().
  */
@@ -11,24 +11,14 @@ function nodeorder_perm() {
 }
 
 /**
- * Implementation of hook_help().
- */
-function nodeorder_help($section) {
-  switch ($section) {
-    case 'admin/modules#description':
-      // This description is shown in the listing at admin/modules.
-      return t('Allows the ordering of nodes within taxonomy terms.');
-  }
-}
-
-/**
  * Implementation of hook_form_alter().
  */
 function nodeorder_form_alter($form_id, &$form) {
   if ($form_id == 'taxonomy_form_vocabulary') {
     $is_orderable = $form['module']['#value'] == 'nodeorder';
     
-    $form['orderable'] = array('#type' => 'checkbox',
+    $form['orderable'] = array(
+      '#type' => 'checkbox',
       '#title' => t('Orderable'),
       '#description' => t('If enabled, nodes may be ordered within this vocabulary.'),
       '#weight' => 0.0085, // Try to have this show up after the 'Required' checkbox
@@ -38,6 +28,7 @@ function nodeorder_form_alter($form_id, &$form) {
     $form['#submit']['nodeorder_taxonomy_form_vocabulary_submit'] = array();
   }
 }
+
 
 /**
  * Accept the form submission for a vocabulary and save the results.
@@ -60,7 +51,7 @@ function nodeorder_taxonomy_form_vocabulary_submit($form_id, $form_values) {
       }
       
       if (count($tids) > 0) {
-        db_query("UPDATE {term_node} SET weight_in_tid = nid WHERE tid IN (" . implode(',', $tids) . ")");
+        db_query("UPDATE {term_node} SET weight_in_tid = nid WHERE tid IN (". implode(',', $tids) .")");
       }
       
       db_query("UPDATE {vocabulary} SET module = '%s' WHERE vid = %d", 'nodeorder', $vid);
@@ -84,7 +75,7 @@ function nodeorder_taxonomy_form_vocabulary_submit($form_id, $form_values) {
       }
       
       if (count($tids) > 0) {
-        db_query("UPDATE {term_node} SET weight_in_tid = 0 WHERE tid IN (" . implode(',', $tids) . ")");
+        db_query("UPDATE {term_node} SET weight_in_tid = 0 WHERE tid IN (". implode(',', $tids) .")");
       }
       
       drupal_set_message(t('You may no longer order nodes within this vocabulary.'));
@@ -107,8 +98,19 @@ function nodeorder_link($type, $node = 0, $main = 0) {
         foreach ($node->taxonomy as $term) {
           $vocabulary = taxonomy_get_vocabulary($term->vid);
           if ($vocabulary->module == 'nodeorder') {
-            $links[] = l(t('move up in %category', array('%category' => $term->name)), "nodeorder/moveup/$node->nid/$term->tid", array('title' => t('Move this %nodetype up in its category.', array('%nodetype' => $node->type)), 'class' => 'rubric-pe-move'), 'destination=' . $_GET['q']);
-            $links[] = l(t('move down in %category', array('%category' => $term->name)), "nodeorder/movedown/$node->nid/$term->tid", array('title' => t('Move this %nodetype down in its category.', array('%nodetype' => $node->type)), 'class' => 'rubric-pe-move'), 'destination=' . $_GET['q']);
+            $links['nodeorder_move_up_'. $term->tid] = array(
+              'href' => "nodeorder/moveup/". $node->nid ."/". $term->tid, 
+              'title' => t("move up in ". $term->name), 
+              'query' => "destination=". $_GET['q'],
+              'attributes' => array('title' => t("Move this ". $node->type ." up in its category.")),
+            );
+    
+            $links['nodeorder_move_down_'. $term->tid] = array(
+              'href' => "nodeorder/movedown/". $node->nid ."/". $term->tid, 
+              'title' => t("move down in ". $term->name),
+              'query' => "destination=". $_GET['q'],
+              'attributes' => array('title' => t("Move this ". $node->type ." down in its category.")),
+            );
           }
         }
       }
@@ -180,7 +182,7 @@ function nodeorder_term_page($str_tids = '', $depth = 0, $op = 'page') {
           // the term...
           if (count($tids) == 1) {
             if (user_access('order nodes within categories') && variable_get('nodeorder_link_to_ordering_page', 1)) {
-              $output .= theme('nodeorder_order_icon', 'nodeorder/order/' . $tids[0], $names[0]);
+              $output .= theme('nodeorder_order_icon', 'nodeorder/order/'. $tids[0], $names[0]);
             }
           }
 
@@ -262,7 +264,7 @@ function nodeorder_select_nodes($tids = array(), $operator = 'or', $depth = 0, $
         $wheres .= ' AND tn'. $index .'.tid IN ('. implode(',', $tids) .')';
       }
       $sql = 'SELECT DISTINCT(n.nid), n.sticky, n.title, n.created FROM {node} n '. $joins .' WHERE n.status = 1 '. $wheres .' ORDER BY '. $order;
-      $sql_count = 'SELECT COUNT(DISTINCT(n.nid)) FROM {node} n '. $joins .' WHERE n.status = 1 ' . $wheres;
+      $sql_count = 'SELECT COUNT(DISTINCT(n.nid)) FROM {node} n '. $joins .' WHERE n.status = 1 '. $wheres;
     }
     $sql = db_rewrite_sql($sql);
     $sql_count = db_rewrite_sql($sql_count);
@@ -290,11 +292,10 @@ function nodeorder_select_nodes($tids = array(), $operator = 'or', $depth = 0, $
 }
 
 function nodeorder_order_nodes($tid) {
-  // We need the Scriptaculous and spajax CSS and JS...
-  spajax_head();
-  $noderorder_css = drupal_get_path('module', 'nodeorder') . '/nodeorder.css';
-  theme_add_style($noderorder_css);
-  
+  drupal_add_js(drupal_get_path('module', 'nodeorder') .'/nodeorder.js');
+  $nodeorder_css = drupal_get_path('module', 'nodeorder') .'/nodeorder.css';
+  drupal_add_css($nodeorder_css);
+
   $nids = array();
   $items = array();
   
@@ -303,19 +304,21 @@ function nodeorder_order_nodes($tid) {
   // Send 0 in as the count to nodeorder_select_nodes, which tells
   // it to put all the nodes (as opposed to some preconfigured number
   // of nodes) in the result set...
+  $list_div_id = 'node-sort-list-'. $tid;
   $count = 0;
   $result = nodeorder_select_nodes(array($tid), 'and', 0, FALSE, $order, $count);
   if (db_num_rows($result) > 0) {
-    $output = "<div id=\"node-sort-list\">\n";
+    $output = "<div id=\"$list_div_id\" class=\"node-sort-list\">\n";
     while ($node = db_fetch_object($result)) {
       $loaded_node = node_load($node->nid);
-    
-      $output .= "<div id=\"node_$node->nid\" class=\"sort-wrapper\">\n";
+      $node_div_id = $list_div_id .'_'. $node->nid;
+      
+      $output .= "<div id=\"$node_div_id\" class=\"sort-wrapper\">\n";
 
       $title_only_while_ordering =  variable_get('nodeorder_minimal_ordering_text', 0);
       
       if ($title_only_while_ordering) {
-        $output .= "<div class=\"node node-shell\"><h2 class=\"title\">" . l($loaded_node->title, "node/$loaded_node->nid") . "</h2></div>\n";
+        $output .= "<div class=\"node node-shell\"><h2>". l($loaded_node->title, "node/$loaded_node->nid") ."</h2></div>\n";
       }
       else {
         $output .= node_view($loaded_node, 1);
@@ -328,16 +331,39 @@ function nodeorder_order_nodes($tid) {
     }
     $output .= "\n</div>\n";
     
-    drupal_set_html_head('<script type="text/javascript">var initialValues = ' . spajax_to_js($nids) . ';</script>');
-    drupal_set_html_head('<script type="text/javascript">var initialWeights = ' . spajax_to_js($weights) . ';</script>');
-    $onUpdate = "function (container) { var tid = $tid; var url = '/nodeorder/reordered'; new Ajax.Request(url, { method: 'post', postBody: Sortable.serialize(container.id)+'&initial-values='+initialValues+'&initial-weights='+initialWeights+'&tid='+tid } ); initialValues = Sortable.sequence(container.id); }";
+    // Set up the page with the initial values (nids) and weights.  When a node gets
+    // dragged & dropped, we'll update the initialValues with the new node order.  The
+    // weights will stay the same since our algorithm just swaps weights around within
+    // the tid...
+    //
+    // In Drupal 5.x with the port from Spajax to Prototype, the format of these variables
+    // has changed from arrays to comma-separated strings.
+    drupal_set_html_head('<script type="text/javascript">var initialValues = "'. implode(',', $nids) .'";</script>');
+    drupal_set_html_head('<script type="text/javascript">var initialWeights = "'. implode(',', $weights) .'";</script>');
     
+    $onchange = <<<EOT
+      function (obj) {
+        var serial = $.SortSerialize(obj[0].id);
+        newValues = nodeorder_fix_values(serial.hash, '$list_div_id');
+        $.ajax(
+          {
+            type: "POST",
+            url: "/nodeorder/reordered",
+            data: 'new-values='+newValues+'&initial-values='+initialValues+'&initial-weights='+initialWeights+'&tid='+$tid+'&list-id=$list_div_id'
+          }
+        );
+        initialValues = newValues;
+      }
+EOT;
     // Tell the Sortable that the child elements are DIVs with class="sort-wrapper"...
-    $options = array('tag' => 'div',
-      'only' => 'sort-wrapper',
-      'handle' => 'title',
-      '#onUpdate' => $onUpdate);
-    spajax_sortable_element('node-sort-list', $options);
+    $options = array(
+      'accept' => 'sort-wrapper',
+      'helperclass' => 'sortable-helper',
+      'axis' => 'vertically',
+      'handle' => 'h2',
+      '#onchange' => $onchange
+    );
+    interface_sortable_element($list_div_id, $options);
   }
   
   $term = taxonomy_get_term($tid);
@@ -345,12 +371,21 @@ function nodeorder_order_nodes($tid) {
   drupal_set_title(t('Set the order of nodes in ') . $term->name);
   return $output;
 }
-
+/**
+ * AJAX callback that gets executed after every drop.  Updates the
+ * database with the new order of nodes in the given category.
+ * 
+ * We should probably provide a way of sending the changes over in
+ * batch.  It would be easy to do by embedding the whole page in a
+ * form.  When the user hits 'submit' they would just end up here
+ * and it would all work the same way...
+ *
+ */
 function nodeorder_reordered() {
   $tid = $_POST['tid'];
+  $new_order = split(',', $_POST['new-values']);
   $initial_order = split(',', $_POST['initial-values']);
   $initial_weights = split(',', $_POST['initial-weights']);
-  $new_order = $_POST['node-sort-list'];
   
   $size = count($initial_order);
   
@@ -395,6 +430,15 @@ function nodeorder_menu($may_cache) {
   $items = array();
 
   if ($may_cache) {
+    $items[] = array(
+      'path' => 'admin/settings/nodeorder',
+      'title' => t('Nodeorder'),
+      'description' => t('Allows the ordering of nodes within taxonomy terms.'),
+      'callback' => 'drupal_get_form',
+      'callback arguments' => 'nodeorder_admin',
+      'access' => user_access('access administration pages'),
+      'type' => MENU_NORMAL_ITEM,
+      );
     $items[] = array('path' => 'nodeorder/term',
       'title' => t('nodeorder term'),
       'callback' => 'nodeorder_term_page', // I want to call taxonomy_term_page but can't change the sort order...
@@ -419,26 +463,30 @@ function nodeorder_menu($may_cache) {
   else if ((arg(0) == 'nodeorder') && (arg(1) == 'moveup' || arg(1) == 'movedown') && is_numeric(arg(2)) && is_numeric(arg(3))) {
     $node = node_load(arg(2));
           
-    $items[] = array('path' => 'nodeorder/moveup/' . $node->nid,
+    $items[] = array(
+      'path' => 'nodeorder/moveup/'. $node->nid,
       'title' => t('Move Up'),
       'callback' => 'nodeorder_move_in_category',
       'callback arguments' => array($node, arg(3), true),
       'access' => user_access('order nodes within categories'),
       'type' => MENU_CALLBACK);
           
-    $items[] = array('path' => 'nodeorder/movedown/' . $node->nid,
+    $items[] = array(
+      'path' => 'nodeorder/movedown/'. $node->nid,
       'title' => t('Move Down'),
       'callback' => 'nodeorder_move_in_category',
       'callback arguments' => array($node, arg(3), false),
       'access' => user_access('order nodes within categories'),
       'type' => MENU_CALLBACK);
   }
-  else if (is_numeric(arg(2))) {
-      $items[] = array('path' => 'admin/taxonomy/' . arg(2) . '/order',
+  else if (is_numeric(arg(3))) {
+      $vid = arg(3);
+      $items[] = array(
+        'path' => 'admin/content/taxonomy/'. $vid .'/order',
         'title' => t('order nodes'),
         'callback' => 'nodeorder_overview_terms',
-        'callback arguments' => array(arg(2)),
-        'access' => user_access('order nodes within categories') && nodeorder_vocabulary_can_be_ordered(arg(2)),
+        'callback arguments' => array($vid),
+        'access' => user_access('order nodes within categories') && nodeorder_vocabulary_can_be_ordered($vid),
         'weight' => 5,
         'type' => MENU_LOCAL_TASK);
   }
@@ -571,14 +619,14 @@ function nodeorder_nodeapi($node, $op, $arg = 0) {
         $tids = nodeorder_orderable_tids($node);
         
         if (count($tids) > 0) {
-          $sql = "UPDATE {term_node} SET weight_in_tid = %d WHERE nid = %d AND tid IN (" . implode(',', $tids) . ")";
+          $sql = "UPDATE {term_node} SET weight_in_tid = %d WHERE nid = %d AND tid IN (". implode(',', $tids) .")";
           db_query($sql, $node->nid, $node->nid);
         }
 
         // New nodes won't have any saved weight_in_tid values...
         if ($node->nodeorder) {
           // Restore any saved weight_in_tid values...
-          foreach($node->nodeorder as $tid => $weight_in_tid) {
+          foreach ($node->nodeorder as $tid => $weight_in_tid) {
             $sql = "UPDATE {term_node} SET weight_in_tid = %d WHERE nid = %d AND tid = %d";
             db_query($sql, $weight_in_tid, $node->nid, $tid);
           }
@@ -589,32 +637,36 @@ function nodeorder_nodeapi($node, $op, $arg = 0) {
 }
 
 function theme_nodeorder_order_icon($path, $name) {
-  return '<div id="nodeorder-icon">' . l(t('Set the order of nodes in %term', array('%term' => $name)), $path) . "</div>\n";
+  return '<div id="nodeorder-icon">'. l(t('Set the order of nodes in !term', array('!term' => $name)), $path) ."</div>\n";
 }
 
+
 /**
- * Implementation of hook_settings().
+ * Form for Admin Settings
  */
-function nodeorder_settings() {
-  $form['nodeorder_show_links_on_node'] = array('#type' => 'checkbox',
+function nodeorder_admin() {
+  $form['nodeorder_show_links_on_node'] = array(
+    '#type' => 'checkbox',
     '#title' => t('Display ordering links on each node'),
     '#description' => t('If enabled, links will be added to each node that allow you to move the node up or down in each of its categories.'),
     '#default_value' => variable_get('nodeorder_show_links_on_node', 1)
   );
 
-  $form['nodeorder_link_to_ordering_page'] = array('#type' => 'checkbox',
+  $form['nodeorder_link_to_ordering_page'] = array(
+    '#type' => 'checkbox',
     '#title' => t('Display link to the ordering page'),
     '#description' => t('If enabled, a link will appear on all nodeorder/TID pages that quickly allows administrators to get to the node ordering administration page for the term.'),
     '#default_value' => variable_get('nodeorder_link_to_ordering_page', 1)
   );
  
-  $form['nodeorder_minimal_ordering_text'] = array('#type' => 'checkbox',
+  $form['nodeorder_minimal_ordering_text'] = array(
+    '#type' => 'checkbox',
     '#title' => t('Only show titles when ordering nodes'),
     '#description' => t('If enabled, only titles will be shown when ordering nodes within a category.  This allows you to see more nodes in a smaller amount of space.  It has no effect on the display of the same nodes in any other context.'),
     '#default_value' => variable_get('nodeorder_minimal_ordering_text', 0)
   );
   
-  return $form;
+  return system_settings_form($form);
 }
 
 /**
@@ -623,20 +675,26 @@ function nodeorder_settings() {
  * 
  * This code was cut and pasted from taxonomy_overview_terms.  If
  * If we were able to add another operation onto each term on the
- * admin/taxonomy/VID page then we wouldn't even need this duplicate
+ * admin/content/taxonomy/VID page then we wouldn't even need this duplicate
  * function.
  * 
  * TODO - put in a patch for a taxonomy hook that lets us add
- *        admin operation links per term...
+ *        admin operation links per term...  maybe it would call
+ *        module_invoke_all('taxonomy', 'list', 'term', $term) and
+ *        array_merge the results with each $row[]...
  */
+
 function nodeorder_overview_terms($vid) {
   if (!nodeorder_vocabulary_can_be_ordered($vid)) {
     return t('This vocabulary is not orderable.  If you would like it to be orderable, check the Orderable box ') .
-      l(t('here'), 'admin/taxonomy/edit/vocabulary' . $vid) . '.'; 
+      l(t('here'), 'admin/content/taxonomy/edit/vocabulary'. $vid) .'.'; 
   }
   
   $header = array(t('Name'), t('Operations'));
   $vocabulary = taxonomy_get_vocabulary($vid);
+  if (!$vocabulary) {
+    return drupal_not_found();
+  }
 
   drupal_set_title(check_plain($vocabulary->name));
   $start_from      = $_GET['page'] ? $_GET['page'] : 0;
@@ -647,8 +705,10 @@ function nodeorder_overview_terms($vid) {
   $tree = taxonomy_get_tree($vocabulary->vid);
   foreach ($tree as $term) {
     $total_entries++; // we're counting all-totals, not displayed
-    if (($start_from && ($start_from * $page_increment) >= $total_entries) || ($displayed_count == $page_increment)) { continue; }
-    $rows[] = array(_taxonomy_depth($term->depth) . ' ' . l($term->name, "nodeorder/term/$term->tid"), l(t('order nodes'), "nodeorder/order/$term->tid"));
+    if (($start_from && ($start_from * $page_increment) >= $total_entries) || ($displayed_count == $page_increment)) {
+      continue;
+    }
+    $rows[] = array(str_repeat('--', $term->depth) .' '. l($term->name, "nodeorder/term/$term->tid"), l(t('order nodes'), "nodeorder/order/$term->tid"));
     $displayed_count++; // we're counting tids displayed
   }
 
