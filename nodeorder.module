@@ -13,7 +13,7 @@ function nodeorder_perm() {
 /**
  * Implementation of hook_form_alter().
  */
-function nodeorder_form_alter(&$form, $form_id) {
+function nodeorder_form_alter(&$form, $form_id, $form_state) {
   if ($form_id == 'taxonomy_form_vocabulary') {
     $is_orderable = $form['module']['#value'] == 'nodeorder';
     
@@ -25,7 +25,7 @@ function nodeorder_form_alter(&$form, $form_id) {
       '#default_value' => $is_orderable
     );
     
-    $form['#submit']['nodeorder_taxonomy_form_vocabulary_submit'] = array();
+    $form['#submit'][] = 'nodeorder_taxonomy_form_vocabulary_submit';
   }
 }
 
@@ -33,7 +33,7 @@ function nodeorder_form_alter(&$form, $form_id) {
 /**
  * Accept the form submission for a vocabulary and save the results.
  */
-function nodeorder_taxonomy_form_vocabulary_submit($form_id, $form_values) {
+function nodeorder_taxonomy_form_vocabulary_submit($form_values, $form, $form_state) {
   $vid = $form_values['vid'];
   
   if ($form_values['orderable']) {
