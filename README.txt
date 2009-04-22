@@ -28,15 +28,6 @@ checkbox on the "edit vocabulary" page titled "Orderable" -- it defaults to
 being unchecked.  After checking this box and saving your changes, you'll be
 able to order nodes that are classified in this category.
 
-- In order to use drag and drop node ordering feature, install the
-<a href="http://drupal.org/project/jquery_update">jQuery Update</a>
-module and the
-<a href="http://drupal.org/project/jquery_interface">jQuery Interface</a>
-module.  Follow those two modules' installation instructions and test
-to make sure they are working.  Installing 
-<a href="http://drupal.org/project/messagefx">Message Effects</a>
-will test jQuery Update and jQuery Interface, so it's not a bad idea to
-install it before installing Nodeorder.
 - To use drag and drop node ordering, you will find a tab called "order
 nodes" on any admin/taxonomy/VID pages where the vocabulary has been set to
 orderable.
