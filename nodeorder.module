@@ -62,6 +62,7 @@ function nodeorder_taxonomy_form_vocabulary_submit($form, &$form_state) {
   if ($form_state['values']['orderable']) {
     if ($form_state['values']['module'] != 'nodeorder') {
       // Switching from non-orderable to orderable...
+      cache_clear_all('nodeorder:', 'cache', TRUE);
         
       // Set weight_in_tid to nid for all rows in term_node where
       // the tid is in this vocabulary...
@@ -82,7 +83,7 @@ function nodeorder_taxonomy_form_vocabulary_submit($form, &$form_state) {
           //select *current* nodes for the current term
           $result = nodeorder_select_nodes(array($tid), 'and', 0, FALSE, $order, 0);
           
-          while($node = db_fetch_object($result)) {
+          while ($node = db_fetch_object($result)) {
             db_lock_table('term_node');
             $max = db_result(db_query($sql_max, $tid));
             db_query($sql_update, $max + 1, $tid, $node->nid);
@@ -99,6 +100,8 @@ function nodeorder_taxonomy_form_vocabulary_submit($form, &$form_state) {
   else {
     if ($form_state['values']['module'] == 'nodeorder') {
       // Switching from orderable to non-orderable...
+      cache_clear_all('nodeorder:', 'cache', TRUE);
+      
       db_query("UPDATE {vocabulary} SET module = '%s' WHERE vid = %d", 'taxonomy', $vid);
         
       // Set weight_in_tid to 0 for all rows in term_node where
@@ -155,20 +158,50 @@ function nodeorder_add_link(&$links, $vocabularies, $node, $term) {
   $vocabulary = $vocabularies[$term->vid];
   
   if ($vocabulary->module == 'nodeorder') {
-    $links['nodeorder_move_up_'. $term->tid] = array(
-      'href' => "nodeorder/moveup/". $node->nid ."/". $term->tid, 
-      'title' => t("move up in ". $term->name),
-      'query' => drupal_get_destination(),
-      'attributes' => array('title' => t("Move this ". $node->type ." up in its category.")),
-    );
+    $weights = nodeorder_get_weight($term->tid, 0);
+    $weight = db_result(db_query("SELECT weight_in_tid FROM {term_node} WHERE nid = %d AND tid = %d", $node->nid, $term->tid));
+    
+    if ($weight > $weights["min"]) {
+      $links['nodeorder_move_up_'. $term->tid] = array(
+        'href' => "nodeorder/moveup/". $node->nid ."/". $term->tid, 
+        'title' => t("move up in ". $term->name),
+        'query' => drupal_get_destination(),
+        'attributes' => array('title' => t("Move this ". $node->type ." up in its category.")),
+      );
+    }
 
-    $links['nodeorder_move_down_'. $term->tid] = array(
-      'href' => "nodeorder/movedown/". $node->nid ."/". $term->tid, 
-      'title' => t("move down in ". $term->name),
-      'query' => drupal_get_destination(),
-      'attributes' => array('title' => t("Move this ". $node->type ." down in its category.")),
-    );
+    if ($weight < $weights["max"]) {
+      $links['nodeorder_move_down_'. $term->tid] = array(
+        'href' => "nodeorder/movedown/". $node->nid ."/". $term->tid, 
+        'title' => t("move down in ". $term->name),
+        'query' => drupal_get_destination(),
+        'attributes' => array('title' => t("Move this ". $node->type ." down in its category.")),
+      );
+    }
   }
+}
+
+function nodeorder_get_weight($tid, $reset) {
+  static $min_weights = array();
+  static $max_weights = array();
+  
+  if ($reset) {
+    unset($min_weights[$tid]);
+    unset($max_weights[$tid]);
+  }
+
+  if (!$min_weights[$tid] || !$max_weights[$tid]) {
+    $result = db_query("SELECT tid, max(weight_in_tid) as max_weight, min(weight_in_tid) as min_weight FROM {term_node} WHERE tid = %d GROUP BY tid", $tid);
+
+    while ($row = db_fetch_object($result)) {
+      $min_weights[$row->tid] = $row->min_weight;
+      $max_weights[$row->tid] = $row->max_weight;
+    }
+  }
+  
+  $weights["min"] = $min_weights[$tid];
+  $weights["max"] = $max_weights[$tid];
+  return $weights;
 }
 
 /**
@@ -283,7 +316,7 @@ function nodeorder_order_access($tid) {
 * Custom access function which determines whether or not the user is allowed to reorder nodes and if the vocabulary is orderable
 */
 function nodeorder_taxonomy_order_access($vid) {
-  return user_access('order nodes within categories') && nodeorder_vocabulary_can_be_ordered($vid);
+  return user_access('order nodes within categories') && variable_get('nodeorder_link_to_ordering_page_taxonomy_admin', 1) && nodeorder_vocabulary_can_be_ordered($vid);
 }
 
 /**
@@ -466,8 +499,8 @@ function nodeorder_move_in_category($direction, $nid, $tid) {
   $weight = db_result(db_query("SELECT weight_in_tid FROM {term_node} WHERE nid = %d AND tid = %d", $node->nid, $tid));
   
   if ($up) {
-    $min_weight = db_result(db_query("SELECT MIN(weight_in_tid) FROM {term_node} WHERE tid = %d", $tid));
-    if ($weight == $min_weight) {
+    $weights = nodeorder_get_weight($tid, 0);
+    if ($weight == $weights["min"]) {
       drupal_set_message(t('%title cannot be moved up as it already is at the top.', array('%title' => $node->title)), 'error');
       drupal_goto($destination);
       return;
@@ -477,8 +510,8 @@ function nodeorder_move_in_category($direction, $nid, $tid) {
     $direction = 'up';
   }
   else {
-    $max_weight = db_result(db_query("SELECT MAX(weight_in_tid) FROM {term_node} WHERE tid = %d", $tid));
-    if ($weight == $max_weight) {
+    $weights = nodeorder_get_weight($tid, 0);
+    if ($weight == $weights["max"]) {
       drupal_set_message(t('%title cannot be moved down as it already is at the bottom.', array('%title' => $node->title)), 'error');
       drupal_goto($destination);
       return;
@@ -516,14 +549,24 @@ function nodeorder_move_in_category($direction, $nid, $tid) {
  * Returns TRUE if the node has terms in any orderable vocabulary...
  */
 function nodeorder_can_be_ordered($node) {
-  $sql = "SELECT v.vid AS vid FROM {vocabulary_node_types} vnt JOIN {vocabulary} v ON vnt.vid = v.vid WHERE vnt.type = '%s' AND v.module = 'nodeorder'";
-  $result = db_query($sql, $node->type);
+  $cid = 'nodeorder:can_be_ordered:'. $node->type;
   
-  if (db_fetch_object($result)) {
-    return TRUE;
+  if (($cache = cache_get($cid)) && !empty($cache->data)) {
+    return $cache->data;
+  } else {
+    $sql = "SELECT v.vid AS vid FROM {vocabulary_node_types} vnt JOIN {vocabulary} v ON vnt.vid = v.vid WHERE vnt.type = '%s' AND v.module = 'nodeorder'";
+    $result = db_query($sql, $node->type);
+
+    $can_be_ordered = FALSE;
+    if (db_fetch_object($result)) {
+      $can_be_ordered = TRUE;
+    }
+    
+    //permanently cache the value for easy reuse
+    cache_set($cid, $can_be_ordered, 'cache');
+    
+    return $can_be_ordered;
   }
-  
-  return FALSE;
 }
 
 /**
@@ -532,15 +575,23 @@ function nodeorder_can_be_ordered($node) {
 function nodeorder_orderable_tids($node) {
   $tids = array();
   $orderable_tids = array();
+  $cid = 'nodeorder:orderable_tids:'. $node->type;
   
-  $sql = "SELECT v.vid AS vid FROM {vocabulary_node_types} vnt JOIN {vocabulary} v ON vnt.vid = v.vid WHERE vnt.type = '%s' AND v.module = 'nodeorder'";
-  $result = db_query($sql, $node->type);
+  if (($cache = cache_get($cid)) && !empty($cache->data)) {
+    $orderable_tids = $cache->data;
+  } else {
+    $sql = "SELECT v.vid AS vid FROM {vocabulary_node_types} vnt JOIN {vocabulary} v ON vnt.vid = v.vid WHERE vnt.type = '%s' AND v.module = 'nodeorder'";
+    $result = db_query($sql, $node->type);
   
-  while ($row = db_fetch_object($result)) {
-    $tree = taxonomy_get_tree($row->vid);
-    foreach ($tree as $term) {
-      $orderable_tids[] = $term->tid;
+    while ($row = db_fetch_object($result)) {
+      $tree = taxonomy_get_tree($row->vid);
+      foreach ($tree as $term) {
+        $orderable_tids[] = $term->tid;
+      }
     }
+    
+    //permanently cache the value for easy reuse
+    cache_set($cid, $orderable_tids, 'cache');
   }
 
   // Now select only those tids which are actually assigned to this term
@@ -600,17 +651,27 @@ function nodeorder_vocabulary_can_be_ordered($vid) {
  * Returns TRUE if the term is in an orderable vocabulary...
  */
 function nodeorder_term_can_be_ordered($tid) {
-  $sql = "SELECT vid FROM {term_data} WHERE tid = %d";
-  $vid = db_result(db_query($sql, $tid));
+  $cid = 'nodeorder:term_can_be_ordered:'. $tid;
   
-  $sql = "SELECT * FROM {vocabulary} WHERE module = 'nodeorder' AND vid = %d";
-  $result = db_query($sql, $vid);
+  if (($cache = cache_get($cid)) && !empty($cache->data)) {
+    return $cache->data;
+  } else {
+    $sql = "SELECT vid FROM {term_data} WHERE tid = %d";
+    $vid = db_result(db_query($sql, $tid));
   
-  if (db_fetch_object($result)) {
-    return TRUE;
+    $sql = "SELECT * FROM {vocabulary} WHERE module = 'nodeorder' AND vid = %d";
+    $result = db_query($sql, $vid);
+
+    $term_can_be_ordered = FALSE;
+    if (db_fetch_object($result)) {
+      $term_can_be_ordered = TRUE;
+    }
+    
+    //permanently cache the value for easy reuse
+    cache_set($cid, $term_can_be_ordered, 'cache');
+    
+    return $term_can_be_ordered;
   }
-  
-  return FALSE;
 }
 
 /**
@@ -632,6 +693,18 @@ function nodeorder_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
         }
       }
       break;
+    case 'delete':
+      // make sure the weight cache is invalidated
+      if (nodeorder_can_be_ordered($node)) {
+        $tids = nodeorder_orderable_tids($node);
+  
+        if (count($tids) > 0) {
+          foreach ($tids as $i => $tid) {
+            nodeorder_get_weight($tid, 1); // reinitialize the cache
+          }
+        }
+      }
+      break;
     case 'insert':
       // Set the initial weight_in_tid to max+1... This makes sure that the weight
       // will be unique for each nid/tid combination
@@ -644,17 +717,17 @@ function nodeorder_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
       
       // Note that we only want to set the weight_in_tid for tids that
       // are in orderable vocabularies...
-      if (nodeorder_can_be_ordered($node)) {    
+      if (nodeorder_can_be_ordered($node)) {
         $tids = nodeorder_orderable_tids($node);
   
         if (count($tids) > 0) {
-          $sql_max = "SELECT MAX(weight_in_tid) FROM {term_node} WHERE tid = %d";
-          $sql_update = "UPDATE {term_node} SET weight_in_tid = %d WHERE tid = %d AND nid = %d";
+          $sql = "UPDATE {term_node} SET weight_in_tid = %d WHERE tid = %d AND nid = %d";
   
           foreach ($tids as $i => $tid) {
             db_lock_table('term_node');
-            $max = db_result(db_query($sql_max, $tid));
-            db_query($sql_update, $max + 1, $tid, $node->nid);
+            $weights = nodeorder_get_weight($tid, 0); // get the cached weights
+            db_query($sql, $weights["max"] + 1, $tid, $node->nid);
+            nodeorder_get_weight($tid, 1); // reinitialize the cache
             db_unlock_tables();
           }
         }
@@ -697,6 +770,13 @@ function nodeorder_admin() {
     '#title' => t('Display link to the ordering page'),
     '#description' => t('If enabled, a tab will appear on all <em>nodeorder/term/%</em> and <em>taxonomy/term/%</em> pages that quickly allows administrators to get to the node ordering administration page for the term.'),
     '#default_value' => variable_get('nodeorder_link_to_ordering_page', 1)
+  );
+  
+  $form['nodeorder_link_to_ordering_page_taxonomy_admin'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Display link to the ordering page on taxonomy administration page'),
+    '#description' => t('If enabled, a tab will appear on <em>admin/content/taxonomy/%</em> pages that quickly allows administrators to get to the node ordering administration page for the term.'),
+    '#default_value' => variable_get('nodeorder_link_to_ordering_page_taxonomy_admin', 1)
   );
   
   $form['nodeorder_replace_taxonomy_link'] = array(
