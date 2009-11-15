@@ -1,3 +1,6 @@
 name = "nodeorder"
 description = "Allows the ordering of nodes within taxonomy terms."
-core = 6.x
+core = 7.x
+files[] = nodeorder.module
+files[] = nodeorder.admin.inc
+files[] = nodeorder.install
