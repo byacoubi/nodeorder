@@ -12,7 +12,6 @@ Drupal.behaviors.blockDrag = function(context) {
 
   // Add a handler for when a row is swapped, enable the submit button.
   tableDrag.onDrop = function() {
-    var submit = document.getElementById('edit-submit');
-    submit.disabled = false;
+    $('form#nodeorder-admin-display-form input#edit-submit').removeAttr('disabled');
   };
 }

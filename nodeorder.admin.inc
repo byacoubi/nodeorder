@@ -102,7 +102,6 @@ function nodeorder_admin_display_form_submit($form, &$form_state) {
   drupal_set_message(t('The node orders have been updated.'));
   cache_clear_all();
 
-  $form_state['redirect'] = 'nodeorder/term/'. $tid;
   return;
 }
 

@@ -158,7 +158,7 @@ function nodeorder_add_link(&$links, $vocabularies, $node, $term) {
   $vocabulary = $vocabularies[$term->vid];
   
   if ($vocabulary->module == 'nodeorder') {
-    $weights = nodeorder_get_weight($term->tid, 0);
+    $weights = nodeorder_get_term_min_max($term->tid, FALSE);
     $weight = db_result(db_query("SELECT weight_in_tid FROM {term_node} WHERE nid = %d AND tid = %d", $node->nid, $term->tid));
     
     if ($weight > $weights["min"]) {
@@ -181,7 +181,7 @@ function nodeorder_add_link(&$links, $vocabularies, $node, $term) {
   }
 }
 
-function nodeorder_get_weight($tid, $reset) {
+function nodeorder_get_term_min_max($tid, $reset) {
   static $min_weights = array();
   static $max_weights = array();
   
@@ -443,7 +443,7 @@ function nodeorder_select_nodes($tids = array(), $operator = 'or', $depth = 0, $
     if ($operator == 'or') {
       $args = call_user_func_array('array_merge', $descendant_tids);
       $placeholders = db_placeholders($args, 'int');
-      $sql = 'SELECT DISTINCT(n.nid), n.sticky, n.title, n.created FROM {node} n INNER JOIN {term_node} tn ON n.vid = tn.vid WHERE tn.tid IN ('. $placeholders .') AND n.status = 1 ORDER BY '. $order;
+      $sql = 'SELECT DISTINCT(n.nid), n.sticky, n.title, n.created, tn.weight_in_tid FROM {node} n INNER JOIN {term_node} tn ON n.vid = tn.vid WHERE tn.tid IN ('. $placeholders .') AND n.status = 1 ORDER BY '. $order;
       $sql_count = 'SELECT COUNT(DISTINCT(n.nid)) FROM {node} n INNER JOIN {term_node} tn ON n.vid = tn.vid WHERE tn.tid IN ('. $placeholders .') AND n.status = 1';
     }
     else {
@@ -455,7 +455,7 @@ function nodeorder_select_nodes($tids = array(), $operator = 'or', $depth = 0, $
         $wheres .= ' AND tn'. $index .'.tid IN ('. db_placeholders($tids, 'int') .')';
         $args = array_merge($args, $tids);
       }
-      $sql = 'SELECT DISTINCT(n.nid), n.sticky, n.title, n.created FROM {node} n '. $joins .' WHERE n.status = 1 '. $wheres .' ORDER BY '. $order;
+      $sql = 'SELECT DISTINCT(n.nid), n.sticky, n.title, n.created, tn0.weight_in_tid FROM {node} n '. $joins .' WHERE n.status = 1 '. $wheres .' ORDER BY '. $order;
       $sql_count = 'SELECT COUNT(DISTINCT(n.nid)) FROM {node} n '. $joins .' WHERE n.status = 1 '. $wheres;
     }
 
@@ -499,7 +499,7 @@ function nodeorder_move_in_category($direction, $nid, $tid) {
   $weight = db_result(db_query("SELECT weight_in_tid FROM {term_node} WHERE nid = %d AND tid = %d", $node->nid, $tid));
   
   if ($up) {
-    $weights = nodeorder_get_weight($tid, 0);
+    $weights = nodeorder_get_term_min_max($tid, FALSE);
     if ($weight == $weights["min"]) {
       drupal_set_message(t('%title cannot be moved up as it already is at the top.', array('%title' => $node->title)), 'error');
       drupal_goto($destination);
@@ -510,7 +510,7 @@ function nodeorder_move_in_category($direction, $nid, $tid) {
     $direction = 'up';
   }
   else {
-    $weights = nodeorder_get_weight($tid, 0);
+    $weights = nodeorder_get_term_min_max($tid, FALSE);
     if ($weight == $weights["max"]) {
       drupal_set_message(t('%title cannot be moved down as it already is at the bottom.', array('%title' => $node->title)), 'error');
       drupal_goto($destination);
@@ -700,7 +700,7 @@ function nodeorder_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
   
         if (count($tids) > 0) {
           foreach ($tids as $i => $tid) {
-            nodeorder_get_weight($tid, 1); // reinitialize the cache
+            nodeorder_get_term_min_max($tid, TRUE); // reinitialize the cache
           }
         }
       }
@@ -725,9 +725,9 @@ function nodeorder_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
   
           foreach ($tids as $i => $tid) {
             db_lock_table('term_node');
-            $weights = nodeorder_get_weight($tid, 0); // get the cached weights
+            $weights = nodeorder_get_term_min_max($tid, FALSE); // get the cached weights
             db_query($sql, $weights["max"] + 1, $tid, $node->nid);
-            nodeorder_get_weight($tid, 1); // reinitialize the cache
+            nodeorder_get_term_min_max($tid, TRUE); // reinitialize the cache
             db_unlock_tables();
           }
         }
