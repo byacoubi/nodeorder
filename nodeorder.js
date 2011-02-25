@@ -1,4 +1,3 @@
-// $Id$
 
 /**
  * Order nodes associated with a term.

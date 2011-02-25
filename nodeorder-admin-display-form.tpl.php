@@ -1,5 +1,4 @@
 ﻿<?php
-// $Id$
 
 /**
  * @file nodeorder-admin-display-form.tpl.php
