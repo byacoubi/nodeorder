@@ -4,81 +4,55 @@
  * @file
  * Admin page callbacks for the nodeorder module.
  */
- 
- /**
- * Menu callback for nodeorder/order.
- */
-function nodeorder_admin_display($tid) {
-  return drupal_get_form('nodeorder_admin_display_form', $tid);
-}
 
 /**
  * Generate main blocks administration form.
  */
-function nodeorder_admin_display_form(&$form_state, $tid) {
+function nodeorder_admin_display_form($form, &$form_state, $tid) {
+  global $pager_page_array, $pager_total, $pager_total_items;
+  
+  $page            = isset($_GET['page']) ? $_GET['page'] : 0;
+  $page_increment  = variable_get('taxonomy_terms_per_page_admin', 100);  // Number of terms per page.
+  $page_entries    = 0;   // Elements shown on this page.
+  $before_entries  = 0;   // Elements at the root level before this page.
+  $after_entries   = 0;   // Elements at the root level after this page.
+  $root_entries    = 0;   // Elements at the root level on this page.
+  
+  $term = taxonomy_term_load($tid);
   // Build form tree
   $form = array(
-    '#tree' => TRUE
+    '#tree' => TRUE,
+    '#parent_fields' => FALSE,
+    '#term' => $term,
   );
+  drupal_set_title(t('Order nodes for <em>%term_name</em>', array('%term_name' => $term->name)), PASS_THROUGH);
   
-  $term = taxonomy_get_term($tid);
-  drupal_set_title(t('Order nodes for <em>%term_name</em>', array( '%term_name' => $term->name)));
-  
-  $order = 'n.sticky DESC, tn0.weight_in_tid';
-  $result = nodeorder_select_nodes(array($tid), 'and', 0, FALSE, $order, 0);
-  $nodes = array();
-  $node_count = 1;
-  $options = array();
-  while ($node = db_fetch_object($result)) {
-    if (!isset($node->nodeorder)) {
-      $node->nodeorder = array();
+  $node_ids = taxonomy_select_nodes($tid, TRUE, 50, array('t.weight' => 'ASC'));
+  $nodes = node_load_multiple($node_ids);
+  $node_count = count($nodes);
 
-      // Store an element called 'nodeorder' that contains
-      // an associative array of tid to weight_in_tid...
-      $weights = db_query('SELECT tid, weight_in_tid FROM {term_node} WHERE nid = %d', $node->nid);
-      while ($term_node = db_fetch_object($weights)) {
-        $node->nodeorder[$term_node->tid] = $term_node->weight_in_tid;
-      }
-    }
-    
-    $nodes[] = $node;
-    $options[$node_count] = $node_count;
-    $node_count++;
-  }
-  
   // Weights range from -delta to +delta, so delta should be at least half
   // of the amount of blocks present. This makes sure all blocks in the same
   // region get an unique weight.
   $weight_delta = round($node_count / 2);
-  
-  $list_tr_id = 'node-sort-list-'. $tid;
+
   foreach ($nodes as $node) {
-    $key = $list_tr_id .'_'. $node->nid;
-  
-    $form[$key]['tid'] = array(
-      '#type' => 'value',
-      '#value' => $tid,
-    );
-    $form[$key]['nid'] = array(
-      '#type' => 'value',
-      '#value' => $node->nid,
-    );
-    $form[$key]['info'] =  array(
-      '#value' => check_plain($node->title),
-    );
-    $form[$key]['weight'] = array(
-      '#type' => 'select',
-      '#default_value' => $node->nodeorder[$tid],
-      '#options' => $options
+    $form[$node->nid]['#node'] = $node;
+    $form[$node->nid]['title'] = array(
+      '#markup' => check_plain($node->title));
+    $form[$node->nid]['weight'] = array(
+      '#type' => 'weight',
+      '#title' => t('Weight for @title', array('@title' => $node->title)),
+      '#title_display' => 'invisible',
+      '#delta' => 10,
+      '#default_value' => $node->weight,
     );
   }
-  
+
   $form['submit'] = array(
     '#type' => 'submit',
     '#value' => t('Save order'),
-    '#disabled' => TRUE 
   );
-
   return $form;
 }
 
@@ -86,15 +60,15 @@ function nodeorder_admin_display_form(&$form_state, $tid) {
  * Process main blocks administration form submission.
  */
 function nodeorder_admin_display_form_submit($form, &$form_state) {
-  $sql = "UPDATE {term_node} SET weight_in_tid = %d WHERE tid = %d AND nid = %d";
-  $tid = -1;
+  $tid = $form['#term']->tid;
 
-  foreach ($form_state['values'] as $node) {
+  foreach ($form_state['values'] as $nid => $node) {
     // Only take form elements that are blocks.
-    if (is_array($node) && array_key_exists('tid', $node)) {
-      db_query($sql, $node['weight'], $node['tid'], $node['nid']);
-      
-      $tid = $node['tid'];
+    if (is_array($node) && array_key_exists('weight', $node)) {
+      db_update('taxonomy_index')->fields(array('weight' => $node['weight']))
+        ->condition('tid', $tid)
+        ->condition('nid', $nid)
+        ->execute();
     }
   }
 
@@ -105,28 +79,58 @@ function nodeorder_admin_display_form_submit($form, &$form_state) {
 }
 
 /**
- * Process variables for nodeorder-admin-display.tpl.php.
+ * Returns HTML for the vocabulary overview form as a sortable list of vocabularies.
  *
- * The $variables array contains the following arguments:
- * - $form
+ * @param $variables
+ *   An associative array containing:
+ *   - form: A render element representing the form.
  *
- * @see nodeorder-admin-display.tpl.php
- * @see theme_nodeorder_admin_display()
+ * @see taxonomy_overview_vocabularies()
+ * @ingroup themeable
  */
-function template_preprocess_nodeorder_admin_display_form(&$variables) { 
-  foreach (element_children($variables['form']) as $i) {
-    $node = &$variables['form'][$i];
-  
-    // Only take form elements that are nodes.
-    if (is_array($node) && array_key_exists('info', $node)) {
-      $variables['form'][$i]['weight']['#attributes']['class'] = 'nodeorder-weight';
-      $variables['node_listing'][$i]->row_class = isset($block['#attributes']['class']) ? $block['#attributes']['class'] : '';
-      $variables['node_listing'][$i]->node_title =  drupal_render($node['info']);
-      $variables['node_listing'][$i]->weight = drupal_render($node['weight']);
-      $variables['node_listing'][$i]->tid =  drupal_render($node['tid']);
-      $variables['node_listing'][$i]->nid =  drupal_render($node['nid']);
+function theme_nodeorder_admin_display_form($variables) {
+  $form = $variables['form'];
+
+  drupal_add_tabledrag('nodeorder', 'order', 'sibling', 'node-weight');
+
+  $errors = form_get_errors() != FALSE ? form_get_errors() : array();
+  $rows = array();
+  foreach (element_children($form) as $key) {
+    if (isset($form[$key]['#node'])) {
+      $node = &$form[$key];
+
+      $row = array();
+      $row[] = drupal_render($node['title']);
+      $node['weight']['#attributes']['class'] = array('node-weight');
+      $row[] = drupal_render($node['weight']);
+      $row = array('data' => $row);
+      $rows[$key] = $row;
     }
   }
 
-  $variables['form_submit'] = drupal_render($variables['form']);
+  // Add necessary classes to rows.
+  $row_position = 0;
+  foreach ($rows as $key => $row) {
+    $rows[$key]['class'] = array();
+    $rows[$key]['class'][] = 'draggable';
+
+    // Add an error class if this row contains a form error.
+    foreach ($errors as $error_key => $error) {
+      if (strpos($error_key, $key) === 0) {
+        $rows[$key]['class'][] = 'error';
+      }
+    }
+    $row_position++;
+  }
+
+  if (empty($rows)) {
+    $rows[] = array(array('data' => $form['#empty_text'], 'colspan' => '3'));
+  }
+
+  $header = array(t('Title'), t('Weight'), );
+  $output = theme('table', array('header' => $header, 'rows' => $rows, 'attributes' => array('id' => 'nodeorder')));
+  $output .= drupal_render_children($form);
+  $output .= theme('pager');
+
+  return $output;
 }

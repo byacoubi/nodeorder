@@ -37,7 +37,7 @@ that determine the way nodeorder works.
 
 TECHNICAL NOTES:
 
-Upon installation, this module adds a new column (weight_in_tid) to the
+Upon installation, this module adds a new column (weight) to the
 term_node table.  Adding a column to a core table?  Are you crazy?  Yeah,
 I guess so ... but it lets us keep the module's code very small since
 most everything works through taxonomy.  Also it helps to avoid an extra
