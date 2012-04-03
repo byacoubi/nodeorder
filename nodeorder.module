@@ -82,32 +82,37 @@ function nodeorder_taxonomy_form_vocabulary_submit($form, &$form_state) {
 
       if (count($tids) > 0) {
         $order = 'n.sticky DESC, tn0.weight';
-        $sql_max = "SELECT MAX(weight) FROM {taxonomy_index} WHERE tid = %d";
+        // $sql_max = "SELECT MAX(weight) FROM {taxonomy_index} WHERE tid = %d";
+        /**
+         * @var SelectQuery
+         */
+        $tid = 0;
+        $query_max = db_select('taxonomy_index', 'ti')
+          ->condition('tid', $tid);
+        $query_max->addExpression('MAX(weight)', 'mweight');
         $sql_update = "UPDATE {taxonomy_index} SET weight = %d WHERE tid = %d AND nid = %d";
 
         foreach ($tids as $i => $tid) {
           //select *current* nodes for the current term
           $result = nodeorder_select_nodes(array($tid), 'and', 0, FALSE, $order, 0);
 
-          while ($node = db_fetch_object($result)) {
-            db_lock_table('taxonomy_term_node');
-            // TODO Please convert this statement to the D7 database API syntax.
-            $max = db_query($sql_max, $tid)->fetchField();
-            // TODO Please convert this statement to the D7 database API syntax.
-            db_query($sql_update, $max + 1, $tid, $node->nid);
-            db_unlock_tables();
+          foreach ($result as $node) {
+            $max = $query_max->execute()->fetchField();
+            $max = (int)$max + 1;
+            db_update('taxonomy_index')
+              ->condition('nid', $node->nid)
+              ->condition('tid', $tid)
+              ->fields(array('weight' => $max))
+              ->execute();
           }
         }
       }
 
       // TODO Please review the conversion of this statement to the D7 database API syntax.
       /* db_query("UPDATE {taxonomy_vocabulary} SET module = '%s' WHERE vid = %d", 'nodeorder', $vid) */
-      db_update('taxonomy_vocabulary')
-  ->fields(array(
-        'module' => 'nodeorder',
-      ))
-  ->condition('vid', $vid)
-  ->execute();
+      db_update('taxonomy_vocabulary')->fields(array('module' => 'nodeorder',))
+        ->condition('vid', $vid)
+        ->execute();
 
       drupal_set_message(t('You may now order nodes within this vocabulary.'));
     }
@@ -119,12 +124,9 @@ function nodeorder_taxonomy_form_vocabulary_submit($form, &$form_state) {
 
       // TODO Please review the conversion of this statement to the D7 database API syntax.
       /* db_query("UPDATE {taxonomy_vocabulary} SET module = '%s' WHERE vid = %d", 'taxonomy', $vid) */
-      db_update('taxonomy_vocabulary')
-  ->fields(array(
-        'module' => 'taxonomy',
-      ))
-  ->condition('vid', $vid)
-  ->execute();
+      db_update('taxonomy_vocabulary')->fields(array('module' => 'taxonomy',))
+        ->condition('vid', $vid)
+        ->execute();
 
       // Set weight to 0 for all rows in term_node where
       // the tid is in this vocabulary...
@@ -137,8 +139,9 @@ function nodeorder_taxonomy_form_vocabulary_submit($form, &$form_state) {
       }
 
       if (count($tids) > 0) {
-        // TODO Please convert this statement to the D7 database API syntax.
-        db_query("UPDATE {taxonomy_index} SET weight = 0 WHERE tid IN (" . implode(',', $tids) . ")");
+        db_update('taxonomy_index')->fields(array('weight' => 0))
+          ->condition('tid', $tids, 'IN')
+          ->execute();
       }
 
       drupal_set_message(t('You may no longer order nodes within this vocabulary.'));
@@ -443,7 +446,7 @@ function nodeorder_select_nodes($tids = array(), $operator = 'or', $depth = 0, $
       $query = db_select('node', 'n');
       $query->condition('status', 1);
       foreach ($descendant_tids as $index => $tids) {
-        $query->join('taxonomy_term_node', "tn$index", "n.vid = tn{$index}.vid");
+        $query->join('taxonomy_index', "tn$index", "n.nid = tn{$index}.nid");
         $query->condition("tn{$index}.tid", $tids, 'IN');
       }
       $query->fields('n', array('nid', 'sticky', 'title', 'created'));
@@ -558,8 +561,6 @@ function nodeorder_move_in_category($direction, $nid, $tid) {
  * Returns TRUE if the node has terms in any orderable vocabulary...
  */
 function nodeorder_can_be_ordered($node) {
-  return TRUE;
-  // @todo: make real check
   $cid = 'nodeorder:can_be_ordered:' . $node->type;
 
   if (($cache = cache_get($cid)) && !empty($cache->data)) {
@@ -669,8 +670,6 @@ function nodeorder_vocabulary_can_be_ordered($vid) {
  * Returns TRUE if the term is in an orderable vocabulary...
  */
 function nodeorder_term_can_be_ordered($tid) {
-  return TRUE;
-  // @todo: perform real check
   $cid = 'nodeorder:term_can_be_ordered:' . $tid;
 
   if (($cache = cache_get($cid)) && !empty($cache->data)) {
@@ -683,9 +682,8 @@ function nodeorder_term_can_be_ordered($tid) {
     $sql = "SELECT * FROM {taxonomy_vocabulary} WHERE module = 'nodeorder' AND vid = %d";
     $result = db_query("SELECT * FROM {taxonomy_vocabulary} WHERE module = :module AND vid = :vid", array(':module' => 'nodeorder', ':vid' => $vid));
 
-    // @todo: make real check
-    $term_can_be_ordered = TRUE;
-    if (db_fetch_object($result)) {
+    $term_can_be_ordered = FALSE;
+    if ($result->fetch()) {
       $term_can_be_ordered = TRUE;
     }
 
