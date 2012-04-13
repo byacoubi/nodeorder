@@ -567,12 +567,33 @@ function nodeorder_can_be_ordered($node) {
     return $cache->data;
   }
   else {
-    $sql = "SELECT v.vid AS vid FROM {taxonomy_vocabulary_node_type} vnt JOIN {taxonomy_vocabulary} v ON vnt.vid = v.vid WHERE vnt.type = '%s' AND v.module = 'nodeorder'";
-    $result = db_query("SELECT v.vid AS vid FROM {taxonomy_vocabulary_node_type} vnt JOIN {taxonomy_vocabulary} v ON vnt.vid = v.vid WHERE vnt.type = :vnt.type AND v.module = :v.module", array(':vnt.type' => $node->type, ':v.module' => 'nodeorder'));
-
     $can_be_ordered = FALSE;
-    if (db_fetch_object($result)) {
-      $can_be_ordered = TRUE;
+    
+    $fields = field_info_fields();
+    $nodeorder_vocabularies = array();
+    foreach ($fields as $field_name => $field) {
+      if ($field['type'] != 'taxonomy_term_reference'
+       || empty($field['bundles']['node'])
+       || !in_array($node->type, $field['bundles']['node'])) {
+        continue;
+      }
+
+      foreach ($field['settings']['allowed_values'] as $allowed_values) {
+        $nodeorder_vocabularies = $allowed_values['vocabulary'];
+      }
+    }   
+    
+    if (!empty($nodeorder_vocabularies)) {
+      $result = db_select('taxonomy_vocabulary', 'v')
+        ->condition('v.module', 'nodeorder')
+        ->condition('v.vid', $nodeorder_vocabularies, 'IN')
+        ->fields('v', array('vid'))
+        ->execute()
+        ->fetchColumn();
+
+      if ($result) {
+        $can_be_ordered = TRUE;
+      }
     }
 
     //permanently cache the value for easy reuse
