@@ -579,7 +579,7 @@ function nodeorder_can_be_ordered($node) {
       }
 
       foreach ($field['settings']['allowed_values'] as $allowed_values) {
-        $nodeorder_vocabularies = $allowed_values['vocabulary'];
+        $nodeorder_vocabularies[] = $allowed_values['vocabulary'];
       }
     }   
     
