@@ -928,7 +928,7 @@ function nodeorder_overview_terms($vid) {
  */
 function nodeorder_views_data_alter(&$data) {
   // taxonomy weight
-  $data['taxonomy_term_node']['weight'] = array(
+  $data['taxonomy_index']['weight'] = array(
     'title' => t('Weight in tid'),
     'help' => t('The term weight in tid field'),
     'field' => array(
