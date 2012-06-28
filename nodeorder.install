@@ -29,6 +29,7 @@ function nodeorder_install() {
   // Add the column to the table
   $ret = array();
   db_add_field('taxonomy_index', 'weight', $spec, $keys);
+  $installation_failed = FALSE;
 
   // Check for query errors
   for ($i = 0; $i < count($ret); $i++) {
