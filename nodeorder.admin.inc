@@ -90,6 +90,7 @@ function nodeorder_admin_display_form_submit($form, &$form_state) {
  */
 function theme_nodeorder_admin_display_form($variables) {
   $form = $variables['form'];
+  dpm($form);
 
   drupal_add_tabledrag('nodeorder', 'order', 'sibling', 'node-weight');
 
@@ -107,7 +108,7 @@ function theme_nodeorder_admin_display_form($variables) {
       $rows[$key] = $row;
     }
   }
-
+  dpm($rows);
   // Add necessary classes to rows.
   $row_position = 0;
   foreach ($rows as $key => $row) {
@@ -124,7 +125,7 @@ function theme_nodeorder_admin_display_form($variables) {
   }
 
   if (empty($rows)) {
-    $rows[] = array(array('data' => $form['#empty_text'], 'colspan' => '3'));
+    $rows[] = array(array('data' => t('There are no nodes for this term.'), 'colspan' => '3'));
   }
 
   $header = array(t('Title'), t('Weight'), );

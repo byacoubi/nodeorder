@@ -1,10 +1,52 @@
 <?php
-// vim: syntax=php
 
 /**
  * @file
  * Nodeorder module.
  */
+
+/**
+ * Implements hook_menu().
+ */
+function nodeorder_menu() {
+  $items = array();
+
+  $items['admin/config/nodeorder'] = array(
+    'title' => t('Nodeorder'),
+    'description' => t('Allows the ordering of nodes within taxonomy terms.'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('nodeorder_admin'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  $items['taxonomy/term/%/order'] = array(
+    'title' => t('Order nodes'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('nodeorder_admin_display_form', 2),
+    'access callback' => 'nodeorder_order_access',
+    'access arguments' => array(2),
+    'file' => 'nodeorder.admin.inc',
+    'weight' => 1,
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['taxonomy/term/%taxonomy_term'] = array(
+    'title' => 'Taxonomy term',
+    'title callback' => 'taxonomy_term_title',
+    'title arguments' => array(2),
+    'page callback' => 'nodeorder_taxonomy_term_page',
+    'page arguments' => array(2),
+    'access arguments' => array('access content'),
+    'file' => 'nodeorder.pages.inc',
+  );
+  $items['taxonomy/term/%taxonomy_term/view'] = array(
+    'title' => 'View',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+
+
+  return $items;
+}
 
 /**
  * Implements hook_permission().
@@ -252,59 +294,18 @@ function nodeorder_term_path($term) {
 }
 
 /**
- * Implements hook_menu().
- */
-function nodeorder_menu() {
-  $items = array();
-
-  $items['admin/config/nodeorder'] = array(
-    'title' => t('Nodeorder'),
-    'description' => t('Allows the ordering of nodes within taxonomy terms.'),
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('nodeorder_admin'),
-    'access arguments' => array('access administration pages'),
-    'type' => MENU_NORMAL_ITEM,
-  );
-
-  $items['taxonomy/term/%/order'] = array(
-    'title' => t('Order nodes'),
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('nodeorder_admin_display_form', 2),
-    'access callback' => 'nodeorder_order_access',
-    'access arguments' => array(2),
-    'file' => 'nodeorder.admin.inc',
-    'weight' => 1,
-    'type' => MENU_LOCAL_TASK,
-  );
-  $items['taxonomy/term/%taxonomy_term'] = array(
-    'title' => 'Taxonomy term',
-    'title callback' => 'taxonomy_term_title',
-    'title arguments' => array(2),
-    'page callback' => 'nodeorder_taxonomy_term_page',
-    'page arguments' => array(2),
-    'access arguments' => array('access content'),
-    'file' => 'nodeorder.pages.inc',
-  );
-  $items['taxonomy/term/%taxonomy_term/view'] = array(
-    'title' => 'View',
-    'type' => MENU_DEFAULT_LOCAL_TASK,
-  );
-  
-
-  return $items;
-}
-
-/**
- * Custom access function which determines whether or not the user is allowed to reorder nodes and if the link should be shown at all
+ * Custom access function which determines whether or not the user is allowed
+ * to reorder nodes and if the link should be shown at all.
  */
 function nodeorder_order_access($tid) {
-  return user_access('order nodes within categories') 
+  return user_access('order nodes within categories')
     && variable_get('nodeorder_link_to_ordering_page', 1)
     && nodeorder_term_can_be_ordered($tid);
 }
 
 /**
- * Custom access function which determines whether or not the user is allowed to reorder nodes and if the vocabulary is orderable
+ * Custom access function which determines whether or not the user is allowed
+ * to reorder nodes and if the vocabulary is orderable.
  */
 function nodeorder_taxonomy_order_access($vid) {
   return user_access('order nodes within categories') && variable_get('nodeorder_link_to_ordering_page_taxonomy_admin', 1) && nodeorder_vocabulary_can_be_ordered($vid);
@@ -568,7 +569,7 @@ function nodeorder_can_be_ordered($node) {
   }
   else {
     $can_be_ordered = FALSE;
-    
+
     $fields = field_info_fields();
     $nodeorder_vocabularies = array();
     foreach ($fields as $field_name => $field) {
@@ -581,8 +582,8 @@ function nodeorder_can_be_ordered($node) {
       foreach ($field['settings']['allowed_values'] as $allowed_values) {
         $nodeorder_vocabularies[] = $allowed_values['vocabulary'];
       }
-    }   
-    
+    }
+
     if (!empty($nodeorder_vocabularies)) {
       $result = db_select('taxonomy_vocabulary', 'v')
         ->condition('v.module', 'nodeorder')
@@ -784,7 +785,7 @@ function nodeorder_node_update($node) {
     // @todo: switch on orderability check
     // $tids = nodeorder_orderable_tids($node);
     // if (count($tids) > 0) {
-    
+
     if (TRUE) {
       $sql = "UPDATE {taxonomy_index} SET weight = %d WHERE tid = %d AND nid = %d";
 
