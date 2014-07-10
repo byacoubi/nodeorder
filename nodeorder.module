@@ -11,7 +11,7 @@
 function nodeorder_menu() {
   $items = array();
 
-  $items['admin/config/nodeorder'] = array(
+  $items['admin/config/content/nodeorder'] = array(
     'title' => t('Nodeorder'),
     'description' => t('Allows the ordering of nodes within taxonomy terms.'),
     'page callback' => 'drupal_get_form',
