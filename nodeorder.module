@@ -54,8 +54,8 @@ function nodeorder_menu() {
 function nodeorder_permission() {
   return array(
     'order nodes within categories' => array(
-      'title' => t('order nodes within categories'),
-      'description' => t('TODO Add a description for \'order nodes within categories\''),
+      'title' => t('Order nodes within categories'),
+      'description' => t('Allows user to change the order of nodes associated taxonomy terms.'),
     ),
   );
 }
