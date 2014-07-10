@@ -10,14 +10,14 @@
  */
 function nodeorder_admin_display_form($form, &$form_state, $tid) {
   global $pager_page_array, $pager_total, $pager_total_items;
-  
+
   $page            = isset($_GET['page']) ? $_GET['page'] : 0;
   $page_increment  = variable_get('taxonomy_terms_per_page_admin', 100);  // Number of terms per page.
   $page_entries    = 0;   // Elements shown on this page.
   $before_entries  = 0;   // Elements at the root level before this page.
   $after_entries   = 0;   // Elements at the root level after this page.
   $root_entries    = 0;   // Elements at the root level on this page.
-  
+
   $term = taxonomy_term_load($tid);
   // Build form tree
   $form = array(
@@ -26,7 +26,7 @@ function nodeorder_admin_display_form($form, &$form_state, $tid) {
     '#term' => $term,
   );
   drupal_set_title(t('Order nodes for <em>%term_name</em>', array('%term_name' => $term->name)), PASS_THROUGH);
-  
+
   $node_ids = taxonomy_select_nodes($tid, TRUE, 50, array('t.weight' => 'ASC'));
   $nodes = node_load_multiple($node_ids);
   $node_count = count($nodes);
@@ -44,7 +44,7 @@ function nodeorder_admin_display_form($form, &$form_state, $tid) {
       '#type' => 'weight',
       '#title' => t('Weight for @title', array('@title' => $node->title)),
       '#title_display' => 'invisible',
-      '#delta' => 10,
+      '#delta' => $weight_delta,
       '#default_value' => $node->weight,
     );
   }
