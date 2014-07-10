@@ -1,6 +1,5 @@
 name = Node Order
 description = Allows the ordering of nodes within taxonomy terms.
-package =
 core = 7.x
 configure = admin/config/content/nodeorder
 
