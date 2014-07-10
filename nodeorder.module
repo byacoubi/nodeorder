@@ -16,7 +16,7 @@ function nodeorder_menu() {
     'description' => t('Allows the ordering of nodes within taxonomy terms.'),
     'page callback' => 'drupal_get_form',
     'page arguments' => array('nodeorder_admin'),
-    'access arguments' => array('access administration pages'),
+    'access arguments' => array('administer nodeorder'),
     'type' => MENU_NORMAL_ITEM,
   );
 
@@ -57,6 +57,10 @@ function nodeorder_permission() {
       'title' => t('Order nodes within categories'),
       'description' => t('Allows user to change the order of nodes associated taxonomy terms.'),
     ),
+    'administer nodeorder' => array(
+      'title' => t('Administer nodeorder'),
+      'description' => t('Provides access to the administration configuration of nodeorder.'),
+     ),
   );
 }
 
