@@ -6,6 +6,47 @@
  */
 
 /**
+ * Form for Admin Settings
+ */
+function nodeorder_admin($form, &$form_state) {
+  $form['nodeorder_show_links'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Display ordering links'),
+    '#description' => t('Choose whether to show ordering links. Links can be shown for all categories associated to a node or for the currently active category. It is also possible to not show the ordering links at all.'),
+  );
+  $form['nodeorder_show_links']['nodeorder_show_links_on_node'] = array(
+    '#type' => 'radios',
+    '#title' => t('Choose how to display ordering links'),
+    '#default_value' => variable_get('nodeorder_show_links_on_node', 1),
+    '#description' => 'When displaying links based on the context, they will only be shown on taxonomy and nodeorder pages.',
+    '#options' => array(t('Don\'t display ordering links'), t('Display ordering links for all categories'), t('Display ordering links based on the active category')),
+  );
+
+  $form['nodeorder_link_to_ordering_page'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Display link to the ordering page'),
+    '#description' => t('If enabled, a tab will appear on all <em>nodeorder/term/%</em> and <em>taxonomy/term/%</em> pages that quickly allows administrators to get to the node ordering administration page for the term.'),
+    '#default_value' => variable_get('nodeorder_link_to_ordering_page', 1),
+  );
+
+  $form['nodeorder_link_to_ordering_page_taxonomy_admin'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Display link to the ordering page on taxonomy administration page'),
+    '#description' => t('If enabled, a tab will appear on <em>admin/content/taxonomy/%</em> pages that quickly allows administrators to get to the node ordering administration page for the term.'),
+    '#default_value' => variable_get('nodeorder_link_to_ordering_page_taxonomy_admin', 1),
+  );
+
+  $form['nodeorder_replace_taxonomy_link'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Replace the link to <em>taxonomy/term/%</em> by <em>nodeorder/term/%</em>'),
+    '#description' => t('If enabled, links to regular <em>taxonomy/term/%</em> pages will always be replaced by links to their <em>nodeorder/term/%</em> counterpart. Otherwise, this will only happen on the <em>nodeorder/term/%</em> pages.'),
+    '#default_value' => variable_get('nodeorder_replace_taxonomy_link', 1),
+  );
+
+  return system_settings_form($form);
+}
+
+/**
  * Generate main blocks administration form.
  */
 function nodeorder_admin_display_form($form, &$form_state, $tid) {

@@ -17,6 +17,7 @@ function nodeorder_menu() {
     'page callback' => 'drupal_get_form',
     'page arguments' => array('nodeorder_admin'),
     'access arguments' => array('administer nodeorder'),
+    'file' => 'includes/nodeorder.admin.inc',
     'type' => MENU_NORMAL_ITEM,
   );
 
@@ -26,7 +27,7 @@ function nodeorder_menu() {
     'page arguments' => array('nodeorder_admin_display_form', 2),
     'access callback' => 'nodeorder_order_access',
     'access arguments' => array(2),
-    'file' => 'nodeorder.admin.inc',
+    'file' => 'includes/nodeorder.admin.inc',
     'weight' => 1,
     'type' => MENU_LOCAL_TASK,
   );
@@ -37,13 +38,12 @@ function nodeorder_menu() {
     'page callback' => 'nodeorder_taxonomy_term_page',
     'page arguments' => array(2),
     'access arguments' => array('access content'),
-    'file' => 'nodeorder.pages.inc',
+    'file' => 'includes/nodeorder.pages.inc',
   );
   $items['taxonomy/term/%taxonomy_term/view'] = array(
     'title' => 'View',
     'type' => MENU_DEFAULT_LOCAL_TASK,
   );
-
 
   return $items;
 }
@@ -72,7 +72,7 @@ function nodeorder_theme() {
     'nodeorder_admin_display_form' => array(
       //'template' => 'nodeorder-admin-display-form',
       'render element' => 'form',
-      'file' => 'nodeorder.admin.inc',
+      'file' => 'includes/nodeorder.admin.inc',
     ),
   );
 }
@@ -915,48 +915,6 @@ function nodeorder_handle_node_lists_decrease($tid) {
 }
 
 /**
- * Form for Admin Settings
- */
-function nodeorder_admin($form, &$form_state) {
-  $form['nodeorder_show_links'] = array(
-    '#type' => 'fieldset',
-    '#title' => t('Display ordering links'),
-    '#description' => t('Choose whether to show ordering links. Links can be shown for all categories associated to a node or for the currently active category. It is also possible to not show the ordering links at all.'),
-  );
-  $form['nodeorder_show_links']['nodeorder_show_links_on_node'] = array(
-    '#type' => 'radios',
-    '#title' => t('Choose how to display ordering links'),
-    '#default_value' => variable_get('nodeorder_show_links_on_node', 1),
-    '#description' => 'When displaying links based on the context, they will only be shown on taxonomy and nodeorder pages.',
-    '#options' => array(t('Don\'t display ordering links'), t('Display ordering links for all categories'), t('Display ordering links based on the active category')),
-  );
-
-  $form['nodeorder_link_to_ordering_page'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Display link to the ordering page'),
-    '#description' => t('If enabled, a tab will appear on all <em>nodeorder/term/%</em> and <em>taxonomy/term/%</em> pages that quickly allows administrators to get to the node ordering administration page for the term.'),
-    '#default_value' => variable_get('nodeorder_link_to_ordering_page', 1),
-  );
-
-  $form['nodeorder_link_to_ordering_page_taxonomy_admin'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Display link to the ordering page on taxonomy administration page'),
-    '#description' => t('If enabled, a tab will appear on <em>admin/content/taxonomy/%</em> pages that quickly allows administrators to get to the node ordering administration page for the term.'),
-    '#default_value' => variable_get('nodeorder_link_to_ordering_page_taxonomy_admin', 1),
-  );
-
-  $form['nodeorder_replace_taxonomy_link'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Replace the link to <em>taxonomy/term/%</em> by <em>nodeorder/term/%</em>'),
-    '#description' => t('If enabled, links to regular <em>taxonomy/term/%</em> pages will always be replaced by links to their <em>nodeorder/term/%</em> counterpart. Otherwise, this will only happen on the <em>nodeorder/term/%</em> pages.'),
-    '#default_value' => variable_get('nodeorder_replace_taxonomy_link', 1),
-  );
-
-
-  return system_settings_form($form);
-}
-
-/**
  * Display a tree of all the terms in a vocabulary, with options to
  * order nodes within each one.
  *
@@ -1025,20 +983,12 @@ function nodeorder_overview_terms($vid) {
 }
 
 /**
- * Implements hook_views_data_alter().
+ * Implements hook_views_api().
  */
-function nodeorder_views_data_alter(&$data) {
-  // taxonomy weight
-  $data['taxonomy_index']['weight'] = array(
-    'title' => t('Weight in tid'),
-    'help' => t('The term weight in tid field'),
-    'field' => array(
-      'handler' => 'views_handler_field',
-      'click sortable' => TRUE,
-    ),
-    'sort' => array(
-      'handler' => 'views_handler_sort',
-    ),
+function nodeorder_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'nodeorder') . '/includes/views',
   );
 }
 
