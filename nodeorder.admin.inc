@@ -90,7 +90,6 @@ function nodeorder_admin_display_form_submit($form, &$form_state) {
  */
 function theme_nodeorder_admin_display_form($variables) {
   $form = $variables['form'];
-  dpm($form);
 
   drupal_add_tabledrag('nodeorder', 'order', 'sibling', 'node-weight');
 
@@ -108,7 +107,7 @@ function theme_nodeorder_admin_display_form($variables) {
       $rows[$key] = $row;
     }
   }
-  dpm($rows);
+
   // Add necessary classes to rows.
   $row_position = 0;
   foreach ($rows as $key => $row) {
