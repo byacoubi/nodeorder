@@ -81,26 +81,29 @@ function nodeorder_theme() {
  * Implements hook_form_alter().
  */
 function nodeorder_form_alter(&$form, $form_state, $form_id) {
-  if ($form_id == 'taxonomy_form_vocabulary') {
-    $is_orderable = $form['module']['#value'] == 'nodeorder';
+  if ($form_id === 'taxonomy_form_vocabulary') {
+    if (!isset($form_state['confirm_delete'])) {
+      // If it's a new term, $form['#vocabulary']->module won't exist.
+      $is_orderable = isset($form['#vocabulary']->module) && $form['#vocabulary']->module === 'nodeorder';
 
-    $form['settings']['orderable'] = array(
-      '#type' => 'checkbox',
-      '#title' => t('Orderable'),
-      '#description' => t('If enabled, nodes may be ordered within this vocabulary.'),
-      '#weight' => 0.0075, // Try to have this show up after the 'Required' checkbox
-      '#default_value' => $is_orderable,
-    );
+      $form['settings']['orderable'] = array(
+        '#type' => 'checkbox',
+        '#title' => t('Orderable'),
+        '#description' => t('If enabled, nodes may be ordered within this vocabulary.'),
+        '#weight' => 0.0075, // Try to have this show up after the 'Required' checkbox
+        '#default_value' => $is_orderable,
+      );
 
-    // Add a submit handler for saving the orderable settings
-    $form['#submit'][] = 'nodeorder_taxonomy_form_vocabulary_submit';
+      // Add a submit handler for saving the orderable settings
+      $form['#submit'][] = 'nodeorder_taxonomy_form_vocabulary_submit';
 
-    /*
-     * Why not implement hook_taxonomy?
-     *   hook_taxonomy sometimes gets called after editing terms;
-     *   in that case the orderable-value will not be available and thus the
-     *   orderable-setting on the vocabulary will always be disabled
-     */
+      /*
+       * Why not implement hook_taxonomy?
+       *   hook_taxonomy sometimes gets called after editing terms;
+       *   in that case the orderable-value will not be available and thus the
+       *   orderable-setting on the vocabulary will always be disabled
+       */
+    }
   }
 }
 
@@ -109,10 +112,10 @@ function nodeorder_form_alter(&$form, $form_state, $form_id) {
  * @see http://drupal.org/node/1354
  */
 function nodeorder_taxonomy_form_vocabulary_submit($form, &$form_state) {
-  $vid = $form_state['values']['vid'];
+  $vid = $form_state['vocabulary']->vid;
 
   if ($form_state['values']['orderable']) {
-    if ($form_state['values']['module'] != 'nodeorder') {
+    if ($form_state['vocabulary']->module !== 'nodeorder') {
       // Switching from non-orderable to orderable...
       cache_clear_all('nodeorder:', 'cache', TRUE);
 
@@ -163,35 +166,33 @@ function nodeorder_taxonomy_form_vocabulary_submit($form, &$form_state) {
       drupal_set_message(t('You may now order nodes within this vocabulary.'));
     }
   }
-  else {
-    if ($form_state['values']['module'] == 'nodeorder') {
-      // Switching from orderable to non-orderable...
-      cache_clear_all('nodeorder:', 'cache', TRUE);
+  elseif ($form_state['vocabulary']->module === 'nodeorder') {
+    // Switching from orderable to non-orderable...
+    cache_clear_all('nodeorder:', 'cache', TRUE);
 
-      // TODO Please review the conversion of this statement to the D7 database API syntax.
-      /* db_query("UPDATE {taxonomy_vocabulary} SET module = '%s' WHERE vid = %d", 'taxonomy', $vid) */
-      db_update('taxonomy_vocabulary')->fields(array('module' => 'taxonomy',))
-        ->condition('vid', $vid)
-        ->execute();
+    // TODO Please review the conversion of this statement to the D7 database API syntax.
+    /* db_query("UPDATE {taxonomy_vocabulary} SET module = '%s' WHERE vid = %d", 'taxonomy', $vid) */
+    db_update('taxonomy_vocabulary')->fields(array('module' => 'taxonomy',))
+      ->condition('vid', $vid)
+      ->execute();
 
-      // Set weight to 0 for all rows in term_node where
-      // the tid is in this vocabulary...
-      $tree = taxonomy_get_tree($vid);
+    // Set weight to 0 for all rows in term_node where
+    // the tid is in this vocabulary...
+    $tree = taxonomy_get_tree($vid);
 
-      $tids = array();
+    $tids = array();
 
-      foreach ($tree as $term) {
-        $tids[] = $term->tid;
-      }
-
-      if (count($tids) > 0) {
-        db_update('taxonomy_index')->fields(array('weight' => 0))
-          ->condition('tid', $tids, 'IN')
-          ->execute();
-      }
-
-      drupal_set_message(t('You may no longer order nodes within this vocabulary.'));
+    foreach ($tree as $term) {
+      $tids[] = $term->tid;
     }
+
+    if (count($tids) > 0) {
+      db_update('taxonomy_index')->fields(array('weight' => 0))
+        ->condition('tid', $tids, 'IN')
+        ->execute();
+    }
+
+    drupal_set_message(t('You may no longer order nodes within this vocabulary.'));
   }
 }
 
