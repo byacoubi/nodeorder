@@ -770,7 +770,15 @@ function nodeorder_node_insert($node) {
  * Implements hook_node_load().
  */
 function nodeorder_node_load($nodes, $types) {
-  $result = db_query('SELECT weight, nid FROM {taxonomy_index} WHERE nid IN(:nids)', array(':nids' => array_keys($nodes)));
+  if (arg(0) != 'taxonomy' || arg(1) != 'term' || !arg(2)) {
+    return;
+  }
+  $tid = arg(2);
+  $query = db_select('taxonomy_index', 't')
+    ->fields('t', array('weight', 'nid'))
+    ->condition('nid', array_keys($nodes), 'IN')
+    ->condition('tid', $tid);
+  $result = $query->execute();
   foreach ($result as $record) {
     $nodes[$record->nid]->weight = $record->weight;
   }
