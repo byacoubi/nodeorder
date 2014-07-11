@@ -184,64 +184,63 @@ function nodeorder_taxonomy_form_vocabulary_submit($form, &$form_state) {
 }
 
 /**
- * Implements hook_link().
+ * Implements hook_node_view().
  */
-function nodeorder_link($type, $node = 0, $main = 0) {
-  $links = array();
-
-  if (user_access('order nodes within categories') && variable_get('nodeorder_show_links_on_node', 1) > 0) {
+function nodeorder_node_view($node, $view_mode, $langcode) {
+  $show_links = variable_get('nodeorder_show_links_on_node', 1);
+  if (user_access('order nodes within categories') && $show_links) {
     // If this node belongs to any vocabularies that are orderable, stick a
     // couple links on per term to allow the user to move the node up or down
     // within the term.
-    if ($type == 'node') {
-      if (array_key_exists('taxonomy', $node)) {
-        $vocabularies = taxonomy_get_vocabularies();
+    $results = db_select('taxonomy_index', 'ti')
+      ->fields('ti', array('tid'))
+      ->condition('nid', $node->nid)
+      ->execute();
+    $terms = taxonomy_term_load_multiple($results->fetchCol());
 
-        if (variable_get('nodeorder_show_links_on_node', 1) == 2
-            && ((arg(0) == 'taxonomy' || arg(0) == 'nodeorder') && arg(1) == 'term')) {
-          $term = taxonomy_term_load(arg(2));
-          nodeorder_add_link($links, $vocabularies, $node, $term);
-        }
-        else if (variable_get('nodeorder_show_links_on_node', 1) == 1) {
-          foreach ($node->taxonomy as $term) {
-            nodeorder_add_link($links, $vocabularies, $node, $term);
-          }
-        }
+    foreach ($terms as $term) {
+      if (nodeorder_vocabulary_can_be_ordered($term->vid)) {
+       nodeorder_add_link($node, $term);
       }
     }
   }
-
-  return $links;
 }
 
 /**
  * @todo Please document this function.
  * @see http://drupal.org/node/1354
  */
-function nodeorder_add_link(&$links, $vocabularies, $node, $term) {
-  $vocabulary = $vocabularies[$term->vid];
+function nodeorder_add_link(&$node, $term) {
+  $weights = nodeorder_get_term_min_max($term->tid);
+  // @todo: Convert to db_select().
+  $weight = db_query("SELECT weight FROM {taxonomy_index} WHERE nid = :nid AND tid = :tid", array(':nid' => $node->nid, ':tid' => $term->tid))->fetchField();
 
-  if ($vocabulary->module == 'nodeorder') {
-    $weights = nodeorder_get_term_min_max($term->tid);
-    $weight = db_query("SELECT weight FROM {taxonomy_index} WHERE nid = :nid AND tid = :tid", array(':nid' => $node->nid, ':tid' => $term->tid))->fetchField();
-
-    if ($weight > $weights["min"]) {
-      $links['nodeorder_move_up_' . $term->tid] = array(
-        'href' => "nodeorder/moveup/" . $node->nid . "/" . $term->tid,
-        'title' => t("move up in " . $term->name),
+  if ($weight > $weights["min"]) {
+    $node->content['links']['nodeorder_move_up_' . $term->tid] = array(
+      '#weight' => 10,
+      '#theme' => 'link',
+      '#path' => "nodeorder/moveup/" . $node->nid . "/" . $term->tid,
+      '#text' => t("Move up in " . $term->name),
+      '#options' => array(
         'query' => drupal_get_destination(),
         'attributes' => array('title' => t("Move this " . $node->type . " up in its category.")),
-      );
-    }
+        'html' => FALSE,
+      ),
+    );
+  }
 
-    if ($weight < $weights["max"]) {
-      $links['nodeorder_move_down_' . $term->tid] = array(
-        'href' => "nodeorder/movedown/" . $node->nid . "/" . $term->tid,
-        'title' => t("move down in " . $term->name),
+  if ($weight < $weights["max"]) {
+    $node->content['links']['nodeorder_move_down_' . $term->tid] = array(
+      '#weight' => 10,
+      '#theme' => 'link',
+      '#path' => "nodeorder/movedown/" . $node->nid . "/" . $term->tid,
+      '#text' => t("Move down in " . $term->name),
+      '#options' => array(
         'query' => drupal_get_destination(),
         'attributes' => array('title' => t("Move this " . $node->type . " down in its category.")),
-      );
-    }
+        'html' => FALSE,
+      ),
+    );
   }
 }
 
@@ -698,7 +697,7 @@ function nodeorder_get_tids($key, $value) {
 }
 
 /**
- * Returns TRUE if the vocabulary is orderable...
+ * Returns TRUE if the vocabulary is orderable.
  */
 function nodeorder_vocabulary_can_be_ordered($vid) {
   $result = db_query("SELECT * FROM {taxonomy_vocabulary} WHERE module = :module AND vid = :vid", array(':module' => 'nodeorder', ':vid' => $vid));
@@ -711,7 +710,7 @@ function nodeorder_vocabulary_can_be_ordered($vid) {
 }
 
 /**
- * Returns TRUE if the term is in an orderable vocabulary...
+ * Returns TRUE if the term is in an orderable vocabulary.
  */
 function nodeorder_term_can_be_ordered($tid) {
   $cid = 'nodeorder:term_can_be_ordered:' . $tid;
