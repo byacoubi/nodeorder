@@ -101,9 +101,15 @@ function nodeorder_form_taxonomy_overview_terms_alter(&$form, $form_state) {
         '#options' => array(
           'query' => drupal_get_destination(),
         ),
+        '#attributes' => array(
+          'class' => array('nodeorder-order-link'),
+        ),
       );
     }
   }
+  $form['#attached']['css'] = array(
+    drupal_get_path('module', 'nodeorder') . '/css/nodeorder.css',
+  );
 }
 
 /**
