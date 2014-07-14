@@ -31,6 +31,8 @@ function nodeorder_menu() {
     'weight' => 1,
     'type' => MENU_LOCAL_TASK,
   );
+
+  // @todo: Is this a failed attempt to override the default term page?
   $items['taxonomy/term/%taxonomy_term'] = array(
     'title' => 'Taxonomy term',
     'title callback' => 'taxonomy_term_title',
@@ -39,10 +41,6 @@ function nodeorder_menu() {
     'page arguments' => array(2),
     'access arguments' => array('access content'),
     'file' => 'includes/nodeorder.pages.inc',
-  );
-  $items['taxonomy/term/%taxonomy_term/view'] = array(
-    'title' => 'View',
-    'type' => MENU_DEFAULT_LOCAL_TASK,
   );
 
   return $items;
