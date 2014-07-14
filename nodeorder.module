@@ -590,7 +590,8 @@ function nodeorder_vocabulary_can_be_ordered($vid) {
   $result = db_select('taxonomy_vocabulary', 'v')
     ->fields('v')
     ->condition('v.module', 'nodeorder')
-    ->condition('v.vid', $vid);
+    ->condition('v.vid', $vid)
+    ->execute();
 
   if ($result->fetchAssoc()) {
     return TRUE;
