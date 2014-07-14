@@ -286,19 +286,6 @@ function nodeorder_get_term_min_max($tid, $reset = FALSE) {
 }
 
 /**
- * Implements hook_term_path() from Taxonomy().
- */
-function nodeorder_term_path($term) {
-  if (variable_get('nodeorder_replace_taxonomy_link', 1)
-       || arg(0) == 'nodeorder') { //if nodeorder is being used to display term pages
-    return 'nodeorder/term/' . $term->tid;
-  }
-  else {
-    return FALSE; //create regular taxonomy-links on taxonomy page
-  }
-}
-
-/**
  * Custom access function which determines whether or not the user is allowed
  * to reorder nodes and if the link should be shown at all.
  */
