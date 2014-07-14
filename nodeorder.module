@@ -76,6 +76,37 @@ function nodeorder_theme() {
 }
 
 /**
+ * Implements hook_form_FORM_ID_alter() for taxonomy_overview_terms().
+ */
+function nodeorder_form_taxonomy_overview_terms_alter(&$form, $form_state) {
+  if ($form['#vocabulary']->module !== 'nodeorder') {
+    return;
+  }
+  // This is a hack to include an 'order' link in the 'Operations' column, but
+  // it is still not as bad a hack as copying/modifying core functions, which is
+  // what we are trying to avoid.
+  foreach ($form as $key => &$item) {
+    if (strpos($key, 'tid') === 0) {
+      // Copy the 'edit' link.
+      $edit = $item['edit'];
+      // Turn edit into something that can hold more items.
+      $item['edit'] = array('#type' =>'item');
+      // Add the 'edit' link back.
+      $item['edit']['edit'] = $edit;
+      // Add an 'order' link.
+      $item['edit']['order'] = array(
+        '#type' => 'link',
+        '#title' => t('order'),
+        '#href' => 'taxonomy/term/' . $item['#term']['tid'] . '/order',
+        '#options' => array(
+          'query' => drupal_get_destination(),
+        ),
+      );
+    }
+  }
+}
+
+/**
  * Implements hook_form_FORM_ID_alter() for taxonomy_form_vocabulary().
  */
 function nodeorder_form_taxonomy_form_vocabulary_alter(&$form, $form_state) {
