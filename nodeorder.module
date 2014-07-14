@@ -854,3 +854,14 @@ function nodeorder_help($path, $arg) {
       return $output;
   }
 }
+
+/**
+ * Implements hook_admin_paths().
+ */
+function nodeorder_admin_paths(){
+  $paths = array(
+    'taxonomy/term/*/order' => TRUE,
+  );
+
+  return $paths;
+}
