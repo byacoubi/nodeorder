@@ -841,8 +841,7 @@ function nodeorder_views_api() {
  */
 function nodeorder_help($path, $arg) {
   switch ($path) {
-    case 'nodeorder/term/%/order':
-    case 'nodeorder/order/%':
+    case 'taxonomy/term/%/order':
       $term = taxonomy_term_load($arg[2]);
       $output = '<p>' . t('This page provides a drag-and-drop interface for ordering nodes. To change the order of a node, grab a drag-and-drop handle under the <em>Node title</em> column and drag the node to a new location in the list. (Grab a handle by clicking and holding the mouse while hovering over a handle icon.) Remember that your changes will not be saved until you click the <em>Save order</em> button at the bottom of the page.') . '</p>';
 
