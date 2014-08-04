@@ -720,6 +720,9 @@ function nodeorder_node_load($nodes, $types) {
  * Handle the weights, which were reset on rebuild of the taxonomy.
  */
 function nodeorder_node_update($node) {
+  if (!nodeorder_can_be_ordered($node)) {
+    return;
+  }
   $tids = nodeorder_orderable_tids($node, TRUE);
   $old_tids = $node->nodeorder;
   foreach ($tids as $tid) {
