@@ -68,7 +68,7 @@ function nodeorder_admin_display_form($form, &$form_state, $tid) {
   );
   drupal_set_title(t('Order nodes for <em>%term_name</em>', array('%term_name' => $term->name)), PASS_THROUGH);
 
-  $node_ids = taxonomy_select_nodes($tid, TRUE, 50, array('t.weight' => 'ASC'));
+  $node_ids = taxonomy_select_nodes($tid, FALSE, FALSE, array('t.weight' => 'ASC'));
   $nodes = node_load_multiple($node_ids);
   $node_count = count($nodes);
 
@@ -171,7 +171,6 @@ function theme_nodeorder_admin_display_form($variables) {
   $header = array(t('Title'), t('Weight'), );
   $output = theme('table', array('header' => $header, 'rows' => $rows, 'attributes' => array('id' => 'nodeorder')));
   $output .= drupal_render_children($form);
-  $output .= theme('pager');
 
   return $output;
 }
