@@ -14,7 +14,7 @@
 function nodeorder_install() {
   // Define field properties.
   $schema = drupal_get_schema('taxonomy_index');
-  $spec = $schema['taxonomy_index']['fields']['weight'];
+  $spec = $schema['fields']['weight'];
 
   // Create an index for 'weight'
   $keys['indexes'] = array('weight' => array('weight'));
