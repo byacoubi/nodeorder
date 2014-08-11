@@ -32,18 +32,16 @@ function nodeorder_menu() {
     'type' => MENU_LOCAL_TASK,
   );
 
-  // @todo: Is this a failed attempt to override the default term page?
-  $items['taxonomy/term/%taxonomy_term'] = array(
-    'title' => 'Taxonomy term',
-    'title callback' => 'taxonomy_term_title',
-    'title arguments' => array(2),
-    'page callback' => 'nodeorder_taxonomy_term_page',
-    'page arguments' => array(2),
-    'access arguments' => array('access content'),
-    'file' => 'includes/nodeorder.pages.inc',
-  );
-
   return $items;
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function nodeorder_menu_alter(&$items) {
+  $items['taxonomy/term/%taxonomy_term']['page callback'] = 'nodeorder_taxonomy_term_page';
+  $items['taxonomy/term/%taxonomy_term']['file'] =  'includes/nodeorder.pages.inc';
+  $items['taxonomy/term/%taxonomy_term']['file path'] = drupal_get_path('module', 'nodeorder');
 }
 
 /**
