@@ -39,6 +39,11 @@ function nodeorder_install() {
 function nodeorder_uninstall() {
   db_drop_index('taxonomy_index', 'weight');
   db_drop_field('taxonomy_index', 'weight');
+  // Remove variables.
+  variable_del('nodeorder_show_links_on_node');
+  variable_del('nodeorder_link_to_ordering_page');
+  variable_del('nodeorder_link_to_ordering_page_taxonomy_admin');
+  variable_del('nodeorder_replace_taxonomy_link');
 }
 
 /**
