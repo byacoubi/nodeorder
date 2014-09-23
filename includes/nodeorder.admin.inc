@@ -36,11 +36,11 @@ function nodeorder_admin($form, &$form_state) {
     '#default_value' => variable_get('nodeorder_link_to_ordering_page_taxonomy_admin', 1),
   );
 
-  $form['nodeorder_replace_taxonomy_link'] = array(
+  $form['nodeorder_override_taxonomy_page'] = array(
     '#type' => 'checkbox',
-    '#title' => t('Replace the link to <em>taxonomy/term/%</em> by <em>nodeorder/term/%</em>'),
-    '#description' => t('If enabled, links to regular <em>taxonomy/term/%</em> pages will always be replaced by links to their <em>nodeorder/term/%</em> counterpart. Otherwise, this will only happen on the <em>nodeorder/term/%</em> pages.'),
-    '#default_value' => variable_get('nodeorder_replace_taxonomy_link', 1),
+    '#title' => t('Override the default taxonomy page with one from nodeorder'),
+    '#description' => t('Disabling this will allow the panels module to override taxonomy pages instead. See <a href="https://www.drupal.org/node/1713048">this issue</a> for more information. You will have to clear caches for the change to take effect.'),
+    '#default_value' => variable_get('nodeorder_override_taxonomy_page', 1),
   );
 
   return system_settings_form($form);

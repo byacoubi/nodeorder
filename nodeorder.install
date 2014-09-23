@@ -43,7 +43,7 @@ function nodeorder_uninstall() {
   variable_del('nodeorder_show_links_on_node');
   variable_del('nodeorder_link_to_ordering_page');
   variable_del('nodeorder_link_to_ordering_page_taxonomy_admin');
-  variable_del('nodeorder_replace_taxonomy_link');
+  variable_del('nodeorder_override_taxonomy_page');
 }
 
 /**
@@ -60,4 +60,11 @@ function nodeorder_schema_alter(&$schema) {
     'initial' => 0,
     'description' => t('A user-defined weight for each node in its respective category.'),
   );
+}
+
+/**
+ * Remove an obsolete variable.
+ */
+function nodeorder_update_7100() {
+  variable_del('nodeorder_replace_taxonomy_link');
 }

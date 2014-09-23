@@ -39,9 +39,12 @@ function nodeorder_menu() {
  * Implements hook_menu_alter().
  */
 function nodeorder_menu_alter(&$items) {
-  $items['taxonomy/term/%taxonomy_term']['page callback'] = 'nodeorder_taxonomy_term_page';
-  $items['taxonomy/term/%taxonomy_term']['file'] =  'includes/nodeorder.pages.inc';
-  $items['taxonomy/term/%taxonomy_term']['file path'] = drupal_get_path('module', 'nodeorder');
+  // Override the default taxonomy page.
+  if (variable_get('nodeorder_override_taxonomy_page', 1)) {
+    $items['taxonomy/term/%taxonomy_term']['page callback'] = 'nodeorder_taxonomy_term_page';
+    $items['taxonomy/term/%taxonomy_term']['file'] =  'includes/nodeorder.pages.inc';
+    $items['taxonomy/term/%taxonomy_term']['file path'] = drupal_get_path('module', 'nodeorder');
+  }
 }
 
 /**
@@ -533,7 +536,6 @@ function nodeorder_can_be_ordered($node) {
         $nodeorder_vocabularies[] = $allowed_values['vocabulary'];
       }
     }
-
     if (!empty($nodeorder_vocabularies)) {
       $result = db_select('taxonomy_vocabulary', 'v')
         ->condition('v.module', 'nodeorder')
