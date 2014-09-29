@@ -663,14 +663,14 @@ function nodeorder_term_can_be_ordered($tid) {
  */
 function nodeorder_node_presave($node) {
   if (nodeorder_can_be_ordered($node)) {
-    // This case should never occur, so why is it being handled?
+    // @todo: When does this occur?
     if (!isset($node->nodeorder)) {
       $node->nodeorder = array();
 
       // When a node gets loaded, store an element called 'nodeorder' that
       // contains an associative array of tid to weight.
       $query = db_select('taxonomy_index', 'ti')
-        ->field('ti', array('tid', 'weight'))
+        ->fields('ti', array('tid', 'weight'))
         ->condition('nid', $node->nid);
       $result = $query->execute();
 
