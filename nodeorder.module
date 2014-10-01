@@ -662,18 +662,20 @@ function nodeorder_term_can_be_ordered($tid) {
  * Implements hook_node_presave().
  */
 function nodeorder_node_presave($node) {
+  // @todo: As far as I can tell this hook has zero impact. All the real saving
+  // happens on hook_node_insert, which is triggered after this. Once a node is
+  // created then hook_node_load ensures that the needed array is present on the
+  // future editing of a node.
   if (nodeorder_can_be_ordered($node)) {
-    // @todo: When does this occur?
+    // This should only be triggered on node creation.
     if (!isset($node->nodeorder)) {
       $node->nodeorder = array();
-
-      // When a node gets loaded, store an element called 'nodeorder' that
+      // When a node is created, store an element called 'nodeorder' that
       // contains an associative array of tid to weight.
       $query = db_select('taxonomy_index', 'ti')
         ->fields('ti', array('tid', 'weight'))
         ->condition('nid', $node->nid);
       $result = $query->execute();
-
       foreach ($result as $term_node) {
         $node->nodeorder[$term_node->tid] = $term_node->weight;
       }
