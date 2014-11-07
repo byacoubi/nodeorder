@@ -51,3 +51,11 @@ per node will correctly point to the "nodeorder" space when they are in
 orderable vocabularies.
 
 The nodeorder module was developed by FunnyMonkey.
+
+
+Drupal 8 upgrade to-dos:
+
+* Add links to node view for ordering up and down
+* Views support to provide sort criteria for node order weights
+
+

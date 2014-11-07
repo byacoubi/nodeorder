@@ -5,63 +5,6 @@
  * Nodeorder module.
  */
 
-/**
- * Implements hook_menu().
- */
-function nodeorder_menu() {
-  $items = array();
-
-  $items['admin/config/content/nodeorder'] = array(
-    'title' => t('Nodeorder'),
-    'description' => t('Allows the ordering of nodes within taxonomy terms.'),
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('nodeorder_admin'),
-    'access arguments' => array('administer nodeorder'),
-    'file' => 'includes/nodeorder.admin.inc',
-    'type' => MENU_NORMAL_ITEM,
-  );
-
-  $items['taxonomy/term/%/order'] = array(
-    'title' => t('Order nodes'),
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('nodeorder_admin_display_form', 2),
-    'access callback' => 'nodeorder_order_access',
-    'access arguments' => array(2),
-    'file' => 'includes/nodeorder.admin.inc',
-    'weight' => 1,
-    'type' => MENU_LOCAL_TASK,
-  );
-
-  return $items;
-}
-
-/**
- * Implements hook_menu_alter().
- */
-function nodeorder_menu_alter(&$items) {
-  // Override the default taxonomy page.
-  if (variable_get('nodeorder_override_taxonomy_page', 1)) {
-    $items['taxonomy/term/%taxonomy_term']['page callback'] = 'nodeorder_taxonomy_term_page';
-    $items['taxonomy/term/%taxonomy_term']['file'] =  'includes/nodeorder.pages.inc';
-    $items['taxonomy/term/%taxonomy_term']['file path'] = drupal_get_path('module', 'nodeorder');
-  }
-}
-
-/**
- * Implements hook_permission().
- */
-function nodeorder_permission() {
-  return array(
-    'order nodes within categories' => array(
-      'title' => t('Order nodes within categories'),
-      'description' => t('Allows user to change the order of nodes associated taxonomy terms.'),
-    ),
-    'administer nodeorder' => array(
-      'title' => t('Administer nodeorder'),
-      'description' => t('Provides access to the administration configuration of nodeorder.'),
-     ),
-  );
-}
 
 /**
  * Implements hook_theme().
@@ -152,7 +95,7 @@ function nodeorder_taxonomy_form_vocabulary_submit($form, &$form_state) {
 
       // Set weight to nid for all rows in term_node where the tid is in this
       // vocabulary.
-      $tree = taxonomy_get_tree($vid);
+      $tree = \Drupal::entityManager()->getStorage("taxonomy_term")->loadTree($vid);
       $tids = array();
       foreach ($tree as $term) {
         $tids[] = $term->tid;
@@ -202,7 +145,7 @@ function nodeorder_taxonomy_form_vocabulary_submit($form, &$form_state) {
 
     // Set weight to 0 for all rows in term_node where the tid is in this
     // vocabulary.
-    $tree = taxonomy_get_tree($vid);
+    $tree = \Drupal::entityManager()->getStorage("taxonomy_term")->loadTree($vid);
     $tids = array();
     foreach ($tree as $term) {
       $tids[] = $term->tid;
@@ -222,21 +165,23 @@ function nodeorder_taxonomy_form_vocabulary_submit($form, &$form_state) {
 /**
  * Implements hook_node_view().
  */
-function nodeorder_node_view($node, $view_mode, $langcode) {
-  $show_links = variable_get('nodeorder_show_links_on_node', 1);
-  if (user_access('order nodes within categories') && $show_links) {
+function nodeorder_node_view(&$build, $node, $display, $view_mode) {
+  $show_links = \Drupal::config('nodeorder.settings')->get('nodeorder_show_links_on_node');
+
+  if (\Drupal::currentUser()->hasPermission('order nodes within categories') && $show_links) {
     // If this node belongs to any vocabularies that are orderable, stick a
     // couple links on per term to allow the user to move the node up or down
     // within the term.
     $results = db_select('taxonomy_index', 'ti')
       ->fields('ti', array('tid'))
-      ->condition('nid', $node->nid)
+      ->condition('nid', $node->id())
       ->execute();
-    $terms = taxonomy_term_load_multiple($results->fetchCol());
+    $terms = \Drupal\taxonomy\Entity\Term::loadMultiple($results->fetchCol());
 
     foreach ($terms as $term) {
-      if (nodeorder_vocabulary_can_be_ordered($term->vid)) {
-       nodeorder_add_links($node, $term);
+      if (nodeorder_vocabulary_can_be_ordered($term->getVocabularyId())) {
+
+        nodeorder_add_links($node, $term);
       }
     }
   }
@@ -249,44 +194,45 @@ function nodeorder_node_view($node, $view_mode, $langcode) {
  * @see http://drupal.org/node/1354
  */
 function nodeorder_add_links(&$node, $term) {
-  $weights = nodeorder_get_term_min_max($term->tid);
+  $weights = nodeorder_get_term_min_max($term->id());
 
   $weight = db_select('taxonomy_index', 'ti')
     ->fields('ti', array('weight'))
-    ->condition('nid', $node->nid)
-    ->condition('tid', $term->tid)
+    ->condition('nid', $node->id())
+    ->condition('tid', $term->id())
     ->execute()
     ->fetchField();
 
-  if ($weight > $weights['min']) {
-    $node->content['links']['nodeorder_move_up_' . $term->tid] = array(
-      '#weight' => 10,
-      '#theme' => 'link',
-      // @todo: This path does not actually exist.
-      '#path' => 'nodeorder/moveup/' . $node->nid . '/' . $term->tid,
-      '#text' => t('Move up in ' . $term->name),
-      '#options' => array(
-        'query' => drupal_get_destination(),
-        'attributes' => array('title' => t('Move this ' . $node->type . ' up in its category.')),
-        'html' => FALSE,
-      ),
-    );
-  }
+  // @todo: Links are not added to nodes in the same way; need to determine how to add these links to the node view
+  // if ($weight > $weights['min']) {
+  //   $node->content['links']['nodeorder_move_up_' . $term->tid] = array(
+  //     '#weight' => 10,
+  //     '#theme' => 'link',
+  //     // @todo: This path does not actually exist.
+  //     '#path' => 'nodeorder/moveup/' . $node->nid . '/' . $term->tid,
+  //     '#text' => t('Move up in ' . $term->name),
+  //     '#options' => array(
+  //       'query' => drupal_get_destination(),
+  //       'attributes' => array('title' => t('Move this ' . $node->type . ' up in its category.')),
+  //       'html' => FALSE,
+  //     ),
+  //   );
+  // }
 
-  if ($weight < $weights['max']) {
-    $node->content['links']['nodeorder_move_down_' . $term->tid] = array(
-      '#weight' => 10,
-      '#theme' => 'link',
-      // @todo: This path does not actually exist.
-      '#path' => 'nodeorder/movedown/' . $node->nid . '/' . $term->tid,
-      '#text' => t('Move down in ' . $term->name),
-      '#options' => array(
-        'query' => drupal_get_destination(),
-        'attributes' => array('title' => t('Move this ' . $node->type . ' down in its category.')),
-        'html' => FALSE,
-      ),
-    );
-  }
+  // if ($weight < $weights['max']) {
+  //   $node->content['links']['nodeorder_move_down_' . $term->tid] = array(
+  //     '#weight' => 10,
+  //     '#theme' => 'link',
+  //     // @todo: This path does not actually exist.
+  //     '#path' => 'nodeorder/movedown/' . $node->nid . '/' . $term->tid,
+  //     '#text' => t('Move down in ' . $term->name),
+  //     '#options' => array(
+  //       'query' => drupal_get_destination(),
+  //       'attributes' => array('title' => t('Move this ' . $node->type . ' down in its category.')),
+  //       'html' => FALSE,
+  //     ),
+  //   );
+  // }
 }
 
 /**
@@ -333,8 +279,8 @@ function nodeorder_get_term_min_max($tid, $reset = FALSE) {
  * to reorder nodes and if the link should be shown at all.
  */
 function nodeorder_order_access($tid) {
-  return user_access('order nodes within categories')
-    && variable_get('nodeorder_link_to_ordering_page', 1)
+  return \Drupal::currentUser()->hasPermission('order nodes within categories')
+    && \Drupal::config('nodeorder.settings')->get('nodeorder_link_to_ordering_page')
     && nodeorder_term_can_be_ordered($tid);
 }
 
@@ -343,7 +289,7 @@ function nodeorder_order_access($tid) {
  * to reorder nodes and if the vocabulary is orderable.
  */
 function nodeorder_taxonomy_order_access($vid) {
-  return user_access('order nodes within categories') && variable_get('nodeorder_link_to_ordering_page_taxonomy_admin', 1) && nodeorder_vocabulary_can_be_ordered($vid);
+  return \Drupal::currentUser()->hasPermission('order nodes within categories') && \Drupal::config('nodeorder.settings')->get('nodeorder_link_to_ordering_page_taxonomy_admin') && nodeorder_vocabulary_can_be_ordered($vid);
 }
 
 /**
@@ -382,8 +328,8 @@ function nodeorder_select_nodes($tids = array(), $operator = 'or', $depth = 0, $
       $depth = NULL;
     }
     foreach ($tids as $index => $tid) {
-      $term = taxonomy_term_load($tid);
-      $tree = taxonomy_get_tree($term->vid, $tid, $depth);
+      $term = \Drupal::entityManager()->getStorage('taxonomy_term')->load($tid);
+      $tree = \Drupal::entityManager()->getStorage("taxonomy_term")->loadTree($term->vid, $tid, $depth);
       $descendant_tids[] = array_merge(array($tid), array_map('_taxonomy_get_tid_from_term', $tree));
     }
 
@@ -412,13 +358,13 @@ function nodeorder_select_nodes($tids = array(), $operator = 'or', $depth = 0, $
 
     if ($pager) {
       if ($count == -1) {
-        $count = variable_get('default_nodes_main', 10);
+        $count = \Drupal::config('nodeorder.settings')->get('default_nodes_main');
       }
       $result = pager_query($sql, $count, 0, $sql_count, $args);
     }
     else {
       if ($count == -1) {
-        $count = variable_get('feed_default_items', 10);
+        $count = \Drupal::config('nodeorder.settings')->get('feed_default_items');
       }
 
       if ($count == 0) {
@@ -443,7 +389,7 @@ function nodeorder_select_nodes($tids = array(), $operator = 'or', $depth = 0, $
 function nodeorder_move_in_category($direction, $nid, $tid) {
   // Note that it would be nice to wrap this in a transaction.
   $up = ($direction == 'moveup');
-  $node = node_load($nid);
+  $node = \Drupal::entityManager()->getStorage('node')->load($nid);
   $destination = isset($_GET['destination']) ? $_GET['destination'] : $_GET['q'];
 
   // Get the current weight for the node
@@ -504,7 +450,7 @@ function nodeorder_move_in_category($direction, $nid, $tid) {
     ->condition('tid', $tid)
     ->execute();
 
-  $term = taxonomy_term_load($tid);
+  $term = \Drupal::entityManager()->getStorage('taxonomy_term')->load($tid);
   drupal_set_message(t("<em>%title</em> was moved $direction in %category...", array('%title' => $node->title, '%category' => $term->name)));
 
   // Now send user to the page they were on before.
@@ -624,6 +570,9 @@ function nodeorder_orderable_tids_by_node($node) {
  * Returns TRUE if the vocabulary is orderable.
  */
 function nodeorder_vocabulary_can_be_ordered($vid) {
+  // @todo: The taxonomy_vocabulary table doesn't exist, so need to find another way to determine if this vocabulary is sortable or not
+  return TRUE;
+
   $result = db_select('taxonomy_vocabulary', 'v')
     ->fields('v')
     ->condition('v.module', 'nodeorder')
@@ -647,7 +596,7 @@ function nodeorder_term_can_be_ordered($tid) {
     return $cache->data;
   }
   else {
-    $term = taxonomy_term_load($tid);
+    $term = \Drupal::entityManager()->getStorage('taxonomy_term')->load($tid);
     $term_can_be_ordered = nodeorder_vocabulary_can_be_ordered($term->vid);
 
     // @todo: Why is this cached? Ordering is on a vocabulary level.
@@ -711,7 +660,7 @@ function nodeorder_node_insert($node) {
 /**
  * Implements hook_node_load().
  */
-function nodeorder_node_load($nodes, $types) {
+function nodeorder_node_load($nodes, $types = array()) {
   $query = db_select('taxonomy_index', 't')
     ->fields('t', array('weight', 'nid', 'tid'))
     ->condition('nid', array_keys($nodes), 'IN');
@@ -824,7 +773,7 @@ function nodeorder_handle_node_lists_decrease($tid) {
         ->condition('nid', $nid)
         ->condition('tid', $tid)
         ->execute();
-      $weight++;
+      $weight ++;
     }
     // Make sure the weight cache is invalidated.
     nodeorder_get_term_min_max($tid, TRUE);
@@ -847,7 +796,7 @@ function nodeorder_views_api() {
 function nodeorder_help($path, $arg) {
   switch ($path) {
     case 'taxonomy/term/%/order':
-      $term = taxonomy_term_load($arg[2]);
+      $term = \Drupal::entityManager()->getStorage('taxonomy_term')->load($arg[2]);
       $output = '<p>' . t('This page provides a drag-and-drop interface for ordering nodes. To change the order of a node, grab a drag-and-drop handle under the <em>Node title</em> column and drag the node to a new location in the list. (Grab a handle by clicking and holding the mouse while hovering over a handle icon.) Remember that your changes will not be saved until you click the <em>Save order</em> button at the bottom of the page.') . '</p>';
 
       return $output;
@@ -857,15 +806,4 @@ function nodeorder_help($path, $arg) {
 
       return $output;
   }
-}
-
-/**
- * Implements hook_admin_paths().
- */
-function nodeorder_admin_paths(){
-  $paths = array(
-    'taxonomy/term/*/order' => TRUE,
-  );
-
-  return $paths;
 }

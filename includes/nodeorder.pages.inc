@@ -9,7 +9,9 @@
  */
 function nodeorder_taxonomy_term_page($term) {
   // Assign the term name as the page title.
-  drupal_set_title($term->name);
+  // @FIXME: drupal_set_title() has been removed in Drupal 8. Setting the title is now done in different ways depending on the context. For more information, see https://www.drupal.org/node/2067859
+// drupal_set_title($term->name);
+
 
   // Build breadcrumb based on the hierarchy of the term.
   $current = (object) array(
@@ -35,9 +37,9 @@ function nodeorder_taxonomy_term_page($term) {
     'term' => taxonomy_term_view($term, 'full'),
   );
 
-  if ($nids = taxonomy_select_nodes($term->tid, TRUE, variable_get('default_nodes_main', 10),
+  if ($nids = taxonomy_select_nodes($term->tid, TRUE, \Drupal::config('nodeorder.settings')->get('default_nodes_main'),
     array('t.weight' => 'ASC'))) {
-    $nodes = node_load_multiple($nids);
+    $nodes = \Drupal::entityManager()->getStorage('node')->load($nids);
     $build += node_view_multiple($nodes);
     $build['pager'] = array(
       '#theme' => 'pager',
