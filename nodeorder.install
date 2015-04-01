@@ -35,12 +35,6 @@ function nodeorder_install() {
 function nodeorder_uninstall() {
   db_drop_index('taxonomy_index', 'weight');
   db_drop_field('taxonomy_index', 'weight');
-  
-  // Remove variables.
-  \Drupal::config('nodeorder.settings')->clear('nodeorder_show_links_on_node');
-  \Drupal::config('nodeorder.settings')->clear('nodeorder_link_to_ordering_page');
-  \Drupal::config('nodeorder.settings')->clear('nodeorder_link_to_ordering_page_taxonomy_admin');
-  \Drupal::config('nodeorder.settings')->clear('nodeorder_override_taxonomy_page');
 }
 
 /**

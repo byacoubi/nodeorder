@@ -11,14 +11,16 @@
 function nodeorder_views_data_alter(&$data) {
   // Taxonomy weight.
   $data['taxonomy_index']['weight'] = array(
-    'title' => t('Weight in tid'),
-    'help' => t('The term weight in tid field'),
+    'title' => t('Nodeorder'),
+    'help' => t('The node weight in given term'),
     'field' => array(
-      'handler' => 'views_handler_field',
+      'id' => 'standard',
       'click sortable' => TRUE,
+      'label' => t('Nodeorder'),
     ),
     'sort' => array(
-      'handler' => 'views_handler_sort',
+      'id' => 'standard',
+      'label' => t('Nodeorder'),
     ),
   );
 }
