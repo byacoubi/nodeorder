@@ -1,5 +1,5 @@
 nodeorder.settings:
-  type: mapping
+  type: config_object
   label: Settings
   mapping:
     override_taxonomy_page:
