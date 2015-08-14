@@ -13,11 +13,17 @@
  */
 function nodeorder_install() {
   // Define field properties.
-  $schema = drupal_get_schema('taxonomy_index');
-  $spec = $schema['fields']['weight'];
+  $spec = [
+    'type' => 'int',
+    'signed' => TRUE,
+    'not null' => TRUE,
+    'default' => 0,
+    'initial' => 0,
+    'description' => t('A user-defined weight for each node in its respective category.'),
+  ];
 
   // Create an index for 'weight'
-  $keys['indexes'] = array('weight' => array('weight'));
+  $keys['indexes'] = ['weight' => ['weight']];
 
   // Add the column to the table.
   db_add_field('taxonomy_index', 'weight', $spec, $keys);
@@ -35,22 +41,6 @@ function nodeorder_install() {
 function nodeorder_uninstall() {
   db_drop_index('taxonomy_index', 'weight');
   db_drop_field('taxonomy_index', 'weight');
-}
-
-/**
- * Implements hook_schema_alter().
- *
- * Informs drupal_get_schema() of the field addition to 'taxonomy_index'.
- */
-function nodeorder_schema_alter(&$schema) {
-  $schema['taxonomy_index']['fields']['weight'] = array(
-    'type' => 'int',
-    'signed' => TRUE,
-    'not null' => TRUE,
-    'default' => 0,
-    'initial' => 0,
-    'description' => t('A user-defined weight for each node in its respective category.'),
-  );
 }
 
 /**

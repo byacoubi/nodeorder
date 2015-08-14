@@ -47,36 +47,44 @@ class NodeorderCrudTest extends TaxonomyTestBase {
     $this->vocabulary = $this->createVocabulary();
 
     $field_name = 'taxonomy_' . $this->vocabulary->id();
-    entity_create('field_storage_config', array(
+    entity_create('field_storage_config', [
       'field_name' => $field_name,
       'entity_type' => 'node',
-      'type' => 'taxonomy_term_reference',
+      'type' => 'entity_reference',
+      'module' => 'taxonomy',
       'cardinality' => FieldStorageDefinitionInterface::CARDINALITY_UNLIMITED,
-      'settings' => array(
-        'allowed_values' => array(
-          array(
-            'vocabulary' => $this->vocabulary->id(),
-            'parent' => 0,
-          ),
-        ),
-      ),
-    ))->save();
+      'settings' => [
+        'target_type' => 'taxonomy_term',
+      ],
+    ])->save();
 
-    $this->field = entity_create('field_config', array(
+    $this->field = entity_create('field_config', [
       'field_name' => $field_name,
       'bundle' => 'article',
       'entity_type' => 'node',
-    ));
+      'settings' => [
+        'handler' => 'default',
+        'handler_settings' => [
+          'target_bundles' => [
+            $this->vocabulary->id() => $this->vocabulary->id(),
+          ],
+          'sort' => [
+            'field' => '_none',
+          ],
+          'auto_create' => FALSE,
+        ],
+      ],
+    ]);
     $this->field->save();
     entity_get_form_display('node', 'article', 'default')
-      ->setComponent($field_name, array(
+      ->setComponent($field_name, [
         'type' => 'options_select',
-      ))
+      ])
       ->save();
     entity_get_display('node', 'article', 'default')
-      ->setComponent($field_name, array(
-        'type' => 'taxonomy_term_reference_link',
-      ))
+      ->setComponent($field_name, [
+        'type' => 'entity_reference_label',
+      ])
       ->save();
   }
 

@@ -7,7 +7,7 @@
 
 use Drupal\Core\Cache\Cache;
 use Drupal\Core\Form\FormStateInterface;
-use Drupal\node\Entity\Node;
+use Drupal\node\NodeInterface;
 use Drupal\taxonomy\Entity\Vocabulary;
 
 /**
@@ -472,7 +472,7 @@ function nodeorder_move_in_category($direction, $nid, $tid) {
 /**
  * Returns TRUE if the node has terms in any orderable vocabulary.
  */
-function nodeorder_can_be_ordered(Node $node) {
+function nodeorder_can_be_ordered(NodeInterface $node) {
   $cid = 'nodeorder:can_be_ordered:' . $node->getType();
 
   if (($cache = \Drupal::cache()->get($cid)) && !empty($cache->data)) {
@@ -481,14 +481,14 @@ function nodeorder_can_be_ordered(Node $node) {
   else {
     $can_be_ordered = FALSE;
 
-    $nodeorder_vocabularies = array();
+    $nodeorder_vocabularies = [];
     foreach ($node->getFieldDefinitions() as $field) {
-      if ($field->getType() != 'taxonomy_term_reference') {
+      if ($field->getType() != 'entity_reference' || $field->getSetting('target_type') != 'taxonomy_term') {
         continue;
       }
 
-      foreach ($field->getSetting('allowed_values') as $allowed_values) {
-        $nodeorder_vocabularies[] = $allowed_values['vocabulary'];
+      foreach ($field->getSetting('handler_settings')['target_bundles'] as $vocabulary) {
+        $nodeorder_vocabularies[] = $vocabulary;
       }
     }
 
@@ -508,7 +508,7 @@ function nodeorder_can_be_ordered(Node $node) {
 /**
  * Returns an array of the node's tids that are in orderable vocabularies.
  */
-function nodeorder_orderable_tids(Node $node, $reset = FALSE) {
+function nodeorder_orderable_tids(NodeInterface $node, $reset = FALSE) {
   $cid = 'nodeorder:orderable_tids:' . $node->getType();
 
   if (!$reset && ($cache = \Drupal::cache()->get($cid)) && !empty($cache->data)) {
@@ -547,10 +547,10 @@ function nodeorder_orderable_tids(Node $node, $reset = FALSE) {
  *
  * Adopted form API function taxonomy_build_node_index().
  */
-function nodeorder_orderable_tids_by_node(Node $node) {
+function nodeorder_orderable_tids_by_node(NodeInterface $node) {
   $tids = array();
   foreach ($node->getFieldDefinitions() as $field) {
-    if ($field->getType() == 'taxonomy_term_reference') {
+    if ($field->getType() == 'entity_reference' && $field->getSetting('target_type') == 'taxonomy_term') {
       // If a field value is not set in the node object when node_save() is
       // called, the old value from $node->original is used.
       $field_name = $field->getName();
@@ -613,10 +613,10 @@ function nodeorder_term_can_be_ordered($tid) {
 /**
  * Implements hook_node_presave().
  */
-function nodeorder_node_presave(Node $node) {
+function nodeorder_node_presave(NodeInterface $node) {
   if (nodeorder_can_be_ordered($node)) {
     // Store the old node orders for use in nodeorder_node_update().
-    $node->nodeorder = array();
+    $node->nodeorder = [];
     // When a node is created, store an element called 'nodeorder' that
     // contains an associative array of tid to weight.
     $query = db_select('taxonomy_index', 'ti')
@@ -634,7 +634,7 @@ function nodeorder_node_presave(Node $node) {
  *
  * Handle lists in which the node is removed.
  */
-function nodeorder_node_delete(Node $node) {
+function nodeorder_node_delete(NodeInterface $node) {
   // Get tids from node var; in the database they're already removed.
   $tids = nodeorder_orderable_tids_by_node($node);
   foreach ($tids as $tid) {
@@ -659,7 +659,7 @@ function nodeorder_node_insert($node) {
  *
  * Handle the weights, which were reset on rebuild of the taxonomy.
  */
-function nodeorder_node_update(Node $node) {
+function nodeorder_node_update(NodeInterface $node) {
   if (!nodeorder_can_be_ordered($node)) {
     return;
   }

@@ -48,29 +48,30 @@ class NodeorderAdminDisplayForm extends FormBase {
     $form['#title'] = $this->t('Order nodes for <em>%term_name</em>', array('%term_name' => $term->label()));
 
     $node_ids = db_select('taxonomy_index', 'ti')
-      ->fields('ti', array('nid'))
+      ->fields('ti', ['nid', 'weight'])
       ->condition('ti.tid', $tid)
       ->orderBy('ti.weight')
       ->execute()
-      ->fetchCol('nid');
-    $nodes = Node::loadMultiple($node_ids);
+      ->fetchAllKeyed();
+    $nodes = Node::loadMultiple(array_keys($node_ids));
     $node_count = count($nodes);
 
     // Weights range from -delta to +delta, so delta should be at least half
     // of the amount of blocks present. This makes sure all blocks in the same
     // region get an unique weight.
     $weight_delta = round($node_count / 2);
+    $current_weight = $node_ids;
 
     foreach ($nodes as $node) {
-      $form[$node->nid->value]['#node'] = $node;
-      $form[$node->nid->value]['title'] = array(
+      $form[$node->id()]['#node'] = $node;
+      $form[$node->id()]['title'] = array(
         '#markup' => $node->label());
-      $form[$node->nid->value]['weight'] = array(
+      $form[$node->id()]['weight'] = array(
         '#type' => 'weight',
         '#title' => $this->t('Weight for @title', array('@title' => $node->label())),
         '#title_display' => 'invisible',
         '#delta' => $weight_delta,
-        '#default_value' => $node->nodeorder[$tid]['weight'],
+        '#default_value' => $current_weight[$node->id()],
       );
     }
 
@@ -105,7 +106,7 @@ class NodeorderAdminDisplayForm extends FormBase {
     foreach ($form_state->getValues() as $nid => $node) {
       // Only take form elements that are blocks.
       if (is_array($node) && array_key_exists('weight', $node)) {
-        db_update('taxonomy_index')->fields(array('weight' => $node['weight']))
+        db_update('taxonomy_index')->fields(['weight' => $node['weight']])
           ->condition('tid', $tid)
           ->condition('nid', $nid)
           ->execute();
