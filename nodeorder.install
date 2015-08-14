@@ -24,6 +24,7 @@ function nodeorder_install() {
 
   // Create an index for 'weight'
   $keys['indexes'] = ['weight' => ['weight']];
+  $keys['fields']['weight'] = $spec;
 
   // Add the column to the table.
   db_add_field('taxonomy_index', 'weight', $spec, $keys);
