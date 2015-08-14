@@ -258,6 +258,11 @@ class NodeOrderManager {
   /**
    * Get a list of term IDs on a node that can be ordered.
    *
+   * This method uses the `taxonomy_index` table to determine which terms on a
+   * node are orderable.
+   *
+   * @see self::getOrderableTidsFromNode()
+   *
    * @param \Drupal\node\NodeInterface
    *   The node to check for orderable term IDs.
    * @param bool
@@ -293,6 +298,41 @@ class NodeOrderManager {
       // Permanently cache the value for easy reuse.
       // @todo this needs to properly clear when node is edited.
       \Drupal::cache()->set($cid, $tids, Cache::PERMANENT, ['nodeorder']);
+    }
+
+    return $tids;
+  }
+
+  /**
+   * Get all term IDs on a node that are on orderable vocabularies.
+   *
+   * Returns an array of the node's tids that are in orderable vocabularies.
+   * Slower than self::getOrderableTids() but needed when tids have already been
+   * removed from the database.
+   *
+   * @param \Drupal\node\NodeInterface
+   *   The node to find term IDs for.
+   *
+   * @return int[]
+   *   An array of term IDs.
+   */
+  public static function getOrderableTidsFromNode(NodeInterface $node) {
+    $tids = [];
+    foreach ($node->getFieldDefinitions() as $field) {
+      if ($field->getType() == 'entity_reference' && $field->getSetting('target_type') == 'taxonomy_term') {
+        // If a field value is not set in the node object when node_save() is
+        // called, the old value from $node->original is used.
+        $field_name = $field->getName();
+        foreach ($node->getTranslationLanguages() as $langcode) {
+          $translated = $node->getTranslation($langcode->getId());
+          foreach ($translated->{$field_name} as $item) {
+            $term = $item->getValue();
+            if (!empty($term['target_id'])) {
+              $tids[$term['target_id']] = $term['target_id'];
+            }
+          }
+        }
+      }
     }
 
     return $tids;

@@ -226,35 +226,6 @@ function nodeorder_add_links(&$node, $term) {
 }
 
 /**
- * Returns an array of the node's tids that are in orderable vocabularies.
- * Slower than nodeorder_orderable_tids but needed when tids have already been
- * removed from the database.
- *
- * Adopted form API function taxonomy_build_node_index().
- */
-function nodeorder_orderable_tids_by_node(NodeInterface $node) {
-  $tids = array();
-  foreach ($node->getFieldDefinitions() as $field) {
-    if ($field->getType() == 'entity_reference' && $field->getSetting('target_type') == 'taxonomy_term') {
-      // If a field value is not set in the node object when node_save() is
-      // called, the old value from $node->original is used.
-      $field_name = $field->getName();
-      foreach ($node->getTranslationLanguages() as $langcode) {
-        $translated = $node->getTranslation($langcode->getId());
-        foreach ($translated->{$field_name} as $item) {
-          $term = $item->getValue();
-          if (!empty($term['target_id'])) {
-            $tids[$term['target_id']] = $term['target_id'];
-          }
-        }
-      }
-    }
-  }
-
-  return $tids;
-}
-
-/**
  * Implements hook_node_presave().
  */
 function nodeorder_node_presave(NodeInterface $node) {
@@ -280,7 +251,7 @@ function nodeorder_node_presave(NodeInterface $node) {
  */
 function nodeorder_node_delete(NodeInterface $node) {
   // Get tids from node var; in the database they're already removed.
-  $tids = nodeorder_orderable_tids_by_node($node);
+  $tids = NodeOrderManager::getOrderableTidsFromNode($node);
   foreach ($tids as $tid) {
     NodeOrderManager::handleListsDecrease($tid);
   }
