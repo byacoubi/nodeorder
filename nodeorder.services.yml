@@ -1,5 +1,0 @@
-services:
-  nodeorder.config_override:
-    class: Drupal\nodeorder\ConfigOverride
-    tags:
-      - { name: config.factory.override }

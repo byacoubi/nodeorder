@@ -35,6 +35,9 @@ orderable.
 - Navigate to admin/settings/nodeorder, where you can set some options
 that determine the way nodeorder works.
 
+- Edit the 'Taxonomy term' (views.view.taxonomy_term) view, and any other
+  applicable taxonomy views and add the 'Nodeorder' sort item.
+
 TECHNICAL NOTES:
 
 Upon installation, this module adds a new column (weight) to the
