@@ -226,100 +226,6 @@ function nodeorder_add_links(&$node, $term) {
 }
 
 /**
- * Custom access function which determines whether or not the user is allowed
- * to reorder nodes and if the link should be shown at all.
- */
-function nodeorder_order_access($tid) {
-  return \Drupal::currentUser()->hasPermission('order nodes within categories')
-    && \Drupal::config('nodeorder.settings')->get('link_to_ordering_page')
-    && nodeorder_term_can_be_ordered($tid);
-}
-
-/**
- * Custom access function which determines whether or not the user is allowed
- * to reorder nodes and if the vocabulary is orderable.
- */
-function nodeorder_taxonomy_order_access($vid) {
-  return \Drupal::currentUser()->hasPermission('order nodes within categories') && \Drupal::config('nodeorder.settings')->get('nodeorder_link_to_ordering_page_taxonomy_admin') && NodeOrderManager::vocabularyIsOrderable($vid);
-}
-
-/**
- * Move a node up or down in its category.
- *
- * @todo: This function is never called.
- */
-function nodeorder_move_in_category($direction, $nid, $tid) {
-  // Note that it would be nice to wrap this in a transaction.
-  $up = ($direction == 'moveup');
-  $node = \Drupal::entityManager()->getStorage('node')->load($nid);
-  $destination = isset($_GET['destination']) ? $_GET['destination'] : $_GET['q'];
-
-  // Get the current weight for the node
-  // @todo: db_select() or create a function as this exact query is repeated.
-  $weight = db_query("SELECT weight FROM {taxonomy_index} WHERE nid = :nid AND tid = :tid", array(':nid' => $node->nid, ':tid' => $tid))->fetchField();
-
-  if ($up) {
-    $weights = NodeOrderManager::getTermMinMax($tid);
-    if ($weight == $weights["min"]) {
-      drupal_set_message(t('%title cannot be moved up as it already is at the top.', array('%title' => $node->title)), 'error');
-      drupal_goto($destination);
-      return;
-    }
-
-    // @todo: Covert to db_select().
-    $sql = 'SELECT DISTINCT(n.nid), n.vid, tn.weight FROM {node} n INNER JOIN {taxonomy_index} tn ON n.vid = tn.vid WHERE tn.tid = %d AND n.status = 1 AND tn.weight <= %d ORDER BY tn.weight DESC';
-    $direction = 'up';
-  }
-  else {
-    $weights = NodeOrderManager::getTermMinMax($tid);
-    if ($weight == $weights["max"]) {
-      drupal_set_message(t('%title cannot be moved down as it already is at the bottom.', array('%title' => $node->title)), 'error');
-      drupal_goto($destination);
-      return;
-    }
-
-    // @todo: Convert to db_select().
-    $sql = 'SELECT DISTINCT(n.nid), n.vid, tn.weight FROM {node} n INNER JOIN {taxonomy_index} tn ON n.vid = tn.vid WHERE tn.tid = %d AND n.status = 1 AND tn.weight >= %d ORDER BY tn.weight';
-    $direction = 'down';
-  }
-
-  // @todo: Convert to db_select().
-  $result = db_query_range('SELECT DISTINCT(n.nid), n.vid, tn.weight FROM {node} n INNER JOIN {taxonomy_index} tn ON n.vid = tn.vid WHERE tn.tid = :tn.tid AND n.status = :n.status AND tn.weight >= :tn.weight ORDER BY tn.weight', array(':tn.tid' => $tid, ':n.status' => 1, ':tn.weight' => $weight));
-
-  $node1 = db_fetch_object($result);
-  $node2 = db_fetch_object($result);
-
-  // Now we just need to swap the weights of the two nodes...
-  if (!$node1 || !$node2) {
-    drupal_set_message('There was a problem moving the node within its category.');
-    drupal_access_denied();
-    return;
-  }
-
-  $sql = "UPDATE {taxonomy_index} SET weight = %d WHERE nid = %d AND tid = %d";
-  // TODO Please review the conversion of this statement to the D7 database API syntax.
-  /* db_query($sql, $node1->weight, $node2->nid, $tid) */
-  db_update('taxonomy_term_node')
-    ->fields(array('weight' => $node1->weight))
-    ->condition('nid', $node2->nid)
-    ->condition('tid', $tid)
-    ->execute();
-  // TODO Please review the conversion of this statement to the D7 database API syntax.
-  /* db_query($sql, $node2->weight, $node1->nid, $tid) */
-  db_update('taxonomy_term_node')
-    ->fields(array('weight' => $node2->weight))
-    ->condition('nid', $node1->nid)
-    ->condition('tid', $tid)
-    ->execute();
-
-  $term = \Drupal::entityManager()->getStorage('taxonomy_term')->load($tid);
-  drupal_set_message(t("<em>%title</em> was moved $direction in %category...", array('%title' => $node->title, '%category' => $term->name)));
-
-  // Now send user to the page they were on before.
-  drupal_goto($_GET['destination']);
-}
-
-/**
  * Returns an array of the node's tids that are in orderable vocabularies.
  * Slower than nodeorder_orderable_tids but needed when tids have already been
  * removed from the database.
@@ -346,27 +252,6 @@ function nodeorder_orderable_tids_by_node(NodeInterface $node) {
   }
 
   return $tids;
-}
-
-/**
- * Returns TRUE if the term is in an orderable vocabulary.
- */
-function nodeorder_term_can_be_ordered($tid) {
-  $cid = 'nodeorder:term_can_be_ordered:' . $tid;
-
-  if (($cache = cache_get($cid)) && !empty($cache->data)) {
-    return $cache->data;
-  }
-  else {
-    $term = \Drupal::entityManager()->getStorage('taxonomy_term')->load($tid);
-    $term_can_be_ordered = NodeOrderManager::vocabularyIsOrderable($term->vid);
-
-    // @todo: Why is this cached? Ordering is on a vocabulary level.
-    // Permanently cache the value for easy reuse.
-    cache_set($cid, $term_can_be_ordered, 'cache');
-
-    return $term_can_be_ordered;
-  }
 }
 
 /**
