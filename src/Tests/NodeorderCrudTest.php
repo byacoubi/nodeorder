@@ -8,6 +8,7 @@
 namespace Drupal\nodeorder\Tests;
 
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
+use Drupal\nodeorder\NodeOrderManager;
 use Drupal\taxonomy\Tests\TaxonomyTestBase;
 
 /**
@@ -93,7 +94,7 @@ class NodeorderCrudTest extends TaxonomyTestBase {
    */
   public function testOrderableVocabulary() {
     // Vocabulary should default to not being orderable.
-    $this->assertFalse(nodeorder_is_orderable_vocabulary($this->vocabulary->id()), 'The test vocabulary is not orderable by default.');
+    $this->assertFalse(NodeOrderManager::vocabularyIsOrderable($this->vocabulary->id()), 'The test vocabulary is not orderable by default.');
 
     // Enable 'orderable' on this vocabulary.
     \Drupal::configFactory()->getEditable('nodeorder.settings')
@@ -101,7 +102,7 @@ class NodeorderCrudTest extends TaxonomyTestBase {
       ->save();
 
     // Ensure the vocabulary is sortable.
-    $this->assertTrue(nodeorder_is_orderable_vocabulary($this->vocabulary->id()), 'The test vocabulary is orderable.');
+    $this->assertTrue(NodeOrderManager::vocabularyIsOrderable($this->vocabulary->id()), 'The test vocabulary is orderable.');
   }
 
   /**
