@@ -8,7 +8,6 @@
 use Drupal\Core\Cache\Cache;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\node\NodeInterface;
-use Drupal\nodeorder\NodeOrderManager;
 use Drupal\taxonomy\Entity\Vocabulary;
 
 /**
@@ -20,8 +19,11 @@ use Drupal\taxonomy\Entity\Vocabulary;
  * Implements hook_form_FORM_ID_alter() for taxonomy_overview_terms().
  */
 function nodeorder_form_taxonomy_overview_terms_alter(&$form, FormStateInterface $form_state) {
+  /** @var \Drupal\nodeorder\NodeOrderManagerInterface $nodeorder_manager */
+  $nodeorder_manager = \Drupal::service('nodeorder.manager');
+
   $vocabulary = $form_state->get(['taxonomy', 'vocabulary']);
-  if (!NodeOrderManager::vocabularyIsOrderable($vocabulary->id())) {
+  if (!$nodeorder_manager->vocabularyIsOrderable($vocabulary->id())) {
     return;
   }
   // This is a hack to include an 'order' link in the 'Operations' column, but
@@ -58,6 +60,10 @@ function nodeorder_form_taxonomy_vocabulary_form_alter(&$form, FormStateInterfac
   if ($form_state->get('confirm_delete')) {
     return;
   }
+
+  /** @var \Drupal\nodeorder\NodeOrderManagerInterface $nodeorder_manager */
+  $nodeorder_manager = \Drupal::service('nodeorder.manager');
+
   $vocabulary = $form_state->getFormObject()->getEntity();
 
   $form['nodeorder'] = array(
@@ -69,7 +75,7 @@ function nodeorder_form_taxonomy_vocabulary_form_alter(&$form, FormStateInterfac
     '#type' => 'checkbox',
     '#title' => t('Orderable'),
     '#description' => t('If enabled, nodes may be ordered within this vocabulary.'),
-    '#default_value' => NodeOrderManager::vocabularyIsOrderable($vocabulary->id()),
+    '#default_value' => $nodeorder_manager->vocabularyIsOrderable($vocabulary->id()),
   );
 
   // Add a submit handler for saving the orderable settings.
@@ -80,6 +86,9 @@ function nodeorder_form_taxonomy_vocabulary_form_alter(&$form, FormStateInterfac
  * Submit handler for nodeorder_form_taxonomy_vocabulary_form_alter().
  */
 function nodeorder_taxonomy_vocabulary_form_submit($form, FormStateInterface $form_state) {
+  /** @var \Drupal\nodeorder\NodeOrderManagerInterface $nodeorder_manager */
+  $nodeorder_manager = \Drupal::service('nodeorder.manager');
+
   $vocabulary = $form_state->getFormObject()->getEntity();
   $config = \Drupal::configFactory()->getEditable('nodeorder.settings');
   $orderable = $form_state->getValue('orderable');
@@ -108,7 +117,7 @@ function nodeorder_taxonomy_vocabulary_form_submit($form, FormStateInterface $fo
       foreach ($tids as $i => $tid) {
         // Select *current* nodes for the current term.
         // @todo: Replace this hacked function call.
-        $result = NodeOrderManager::selectNodes(array($tid), 'and', 0, FALSE, $order, 0);
+        $result = $nodeorder_manager->selectNodes(array($tid), 'and', 0, FALSE, $order, 0);
 
         foreach ($result as $node) {
           $max = $query_max->execute()->fetchField();
@@ -156,7 +165,10 @@ function nodeorder_taxonomy_vocabulary_form_submit($form, FormStateInterface $fo
  * Implements hook_node_presave().
  */
 function nodeorder_node_presave(NodeInterface $node) {
-  if (NodeOrderManager::canBeOrdered($node)) {
+  /** @var \Drupal\nodeorder\NodeOrderManagerInterface $nodeorder_manager */
+  $nodeorder_manager = \Drupal::service('nodeorder.manager');
+
+  if ($nodeorder_manager->canBeOrdered($node)) {
     // Store the old node orders for use in nodeorder_node_update().
     $node->nodeorder = [];
     // When a node is created, store an element called 'nodeorder' that
@@ -177,10 +189,13 @@ function nodeorder_node_presave(NodeInterface $node) {
  * Handle lists in which the node is removed.
  */
 function nodeorder_node_delete(NodeInterface $node) {
+  /** @var \Drupal\nodeorder\NodeOrderManagerInterface $nodeorder_manager */
+  $nodeorder_manager = \Drupal::service('nodeorder.manager');
+
   // Get tids from node var; in the database they're already removed.
-  $tids = NodeOrderManager::getOrderableTidsFromNode($node);
+  $tids = $nodeorder_manager->getOrderableTidsFromNode($node);
   foreach ($tids as $tid) {
-    NodeOrderManager::handleListsDecrease($tid);
+    $nodeorder_manager->handleListsDecrease($tid);
   }
 }
 
@@ -190,9 +205,12 @@ function nodeorder_node_delete(NodeInterface $node) {
  * Handle the weights of the node in the taxonomy orderable lists it id added.
  */
 function nodeorder_node_insert(NodeInterface $node) {
-  $tids = NodeOrderManager::getOrderableTids($node, TRUE);
+  /** @var \Drupal\nodeorder\NodeOrderManagerInterface $nodeorder_manager */
+  $nodeorder_manager = \Drupal::service('nodeorder.manager');
+
+  $tids = $nodeorder_manager->getOrderableTids($node, TRUE);
   foreach ($tids as $tid) {
-    NodeOrderManager::addToList($node, $tid);
+    $nodeorder_manager->addToList($node, $tid);
   }
 }
 
@@ -202,10 +220,13 @@ function nodeorder_node_insert(NodeInterface $node) {
  * Handle the weights, which were reset on rebuild of the taxonomy.
  */
 function nodeorder_node_update(NodeInterface $node) {
-  if (!NodeOrderManager::canBeOrdered($node)) {
+  /** @var \Drupal\nodeorder\NodeOrderManagerInterface $nodeorder_manager */
+  $nodeorder_manager = \Drupal::service('nodeorder.manager');
+
+  if (!$nodeorder_manager->canBeOrdered($node)) {
     return;
   }
-  $tids = NodeOrderManager::getOrderableTids($node, TRUE);
+  $tids = $nodeorder_manager->getOrderableTids($node, TRUE);
   $old_tids = $node->nodeorder;
   foreach ($tids as $tid) {
     // Restore weight of unchanged terms, or leave as is if zero.
@@ -222,7 +243,7 @@ function nodeorder_node_update(NodeInterface $node) {
     }
     // Push new or newly orderable node to top of ordered list.
     else {
-      NodeOrderManager::addToList($node, $tid);
+      $nodeorder_manager->addToList($node, $tid);
     }
   }
 
@@ -230,7 +251,7 @@ function nodeorder_node_update(NodeInterface $node) {
   // Note that the old tids are at this point only the ones that were not
   // updated, the others were dropped when restoring above.
   foreach ($old_tids as $tid => $weight) {
-    NodeOrderManager::handleListsDecrease($tid);
+    $nodeorder_manager->handleListsDecrease($tid);
   }
 
 }

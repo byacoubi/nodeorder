@@ -6,26 +6,51 @@
  */
 
 namespace Drupal\nodeorder;
+
 use Drupal\Core\Cache\Cache;
 use Drupal\node\NodeInterface;
 use Drupal\taxonomy\Entity\Vocabulary;
+use Drupal\Core\Config\ConfigFactoryInterface;
+use Drupal\Core\Entity\EntityManagerInterface;
 
 /**
- * The NodeOrderManager contains helper functions for the nodeorder module.
+ * Defines a service that creates and manages noder ordering within taxonomy terms.
  */
-class NodeOrderManager {
+class NodeOrderManager implements NodeOrderManagerInterface {
 
   /**
-   * Push new or newly orderable node to the top of ordered list.
+   * The configuration object factory.
    *
-   * @param \Drupal\node\NodeInterface $node
-   *   The node to add to the top of the list.
-   * @param int $tid
-   *   The term ID to order the node in.
+   * @var \Drupal\Core\Config\ConfigFactoryInterface
    */
-  public static function addToList(NodeInterface $node, $tid) {
+  protected $configFactory;
+
+  /**
+   * Taxonomy term storage.
+   *
+   * @var \Drupal\taxonomy\TermStorageInterface
+   */
+  protected $termStorage;
+
+  /**
+   * Constructs a NodeOrderManager object.
+   *
+   * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
+   *   The configuration object factory.
+   * @param \Drupal\Core\Entity\EntityManagerInterface $entity_manager
+   *   The entity manager.
+   */
+  public function __construct(ConfigFactoryInterface $config_factory, EntityManagerInterface $entity_manager) {
+    $this->configFactory = $config_factory;
+    $this->termStorage = $entity_manager->getStorage('taxonomy_term');
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function addToList(NodeInterface $node, $tid) {
     // Append new orderable node.
-    $weights = static::getTermMinMax($tid); // Get the cached weights.
+    $weights = $this->getTermMinMax($tid); // Get the cached weights.
     db_update('taxonomy_index')
       ->fields(array('weight' => $weights['min'] - 1))
       ->condition('nid', $node->id())
@@ -67,21 +92,10 @@ class NodeOrderManager {
         ->execute();
     }
     // Make sure the weight cache is invalidated.
-    static::getTermMinMax($tid, TRUE);
+    $this->getTermMinMax($tid, TRUE);
   }
 
-  /**
-   * Get the minimum and maximum weights available for ordering nodes on a term.
-   *
-   * @param int $tid
-   *   The tid of the term from which to check values.
-   * @param bool $reset
-   *   (optional) Select from or reset the cache.
-   *
-   * @return array
-   *   An associative array with elements 'min' and 'max'.
-   */
-  public static function getTermMinMax($tid, $reset = FALSE) {
+  public function getTermMinMax($tid, $reset = FALSE) {
     static $min_weights = [];
     static $max_weights = [];
 
@@ -110,50 +124,17 @@ class NodeOrderManager {
   }
 
   /**
-   * Determines if a given vocabulary is orderable.
-   *
-   * @param string $vid
-   *   The vocabulary vid.
-   *
-   * @return bool
-   *   Returns TRUE if the given vocabulary is orderable.
+   * {@inheritdoc}
    */
-  public static function vocabularyIsOrderable($vid) {
-    $vocabularies = \Drupal::config('nodeorder.settings')->get('vocabularies');
+  public function vocabularyIsOrderable($vid) {
+    $vocabularies = $this->configFactory->get('nodeorder.settings')->get('vocabularies');
     return !empty($vocabularies[$vid]);
   }
 
   /**
-   * Finds all nodes that match selected taxonomy conditions.
-   *
-   * NOTE: This is nearly a direct copy of taxonomy_select_nodes() -- see
-   *       http://drupal.org/node/25801 if you find this sort of copy and
-   *       paste upsetting...
-   *
-   *
-   * @param $tids
-   *   An array of term IDs to match.
-   * @param $operator
-   *   How to interpret multiple IDs in the array. Can be "or" or "and".
-   * @param $depth
-   *   How many levels deep to traverse the taxonomy tree. Can be a nonnegative
-   *   integer or "all".
-   * @param $pager
-   *   Whether the nodes are to be used with a pager (the case on most Drupal
-   *   pages) or not (in an XML feed, for example).
-   * @param $order
-   *   The order clause for the query that retrieve the nodes.
-   * @param $count
-   *   If $pager is TRUE, the number of nodes per page, or -1 to use the
-   *   backward-compatible 'default_nodes_main' variable setting.  If $pager
-   *   is FALSE, the total number of nodes to select; or -1 to use the
-   *   backward-compatible 'feed_default_items' variable setting; or 0 to
-   *   select all nodes.
-   *
-   * @return \Drupal\Core\Database\StatementInterface
-   *   A resource identifier pointing to the query results.
+   * {@inheritdoc}
    */
-  public static function selectNodes($tids = [], $operator = 'or', $depth = 0, $pager = TRUE, $order = 'n.sticky DESC, n.created DESC', $count = -1) {
+  public function selectNodes($tids = [], $operator = 'or', $depth = 0, $pager = TRUE, $order = 'n.sticky DESC, n.created DESC', $count = -1) {
     if (count($tids) > 0) {
       // For each term ID, generate an array of descendant term IDs to the right depth.
       $descendant_tids = [];
@@ -161,8 +142,8 @@ class NodeOrderManager {
         $depth = NULL;
       }
       foreach ($tids as $index => $tid) {
-        $term = \Drupal::entityManager()->getStorage('taxonomy_term')->load($tid);
-        $tree = \Drupal::entityManager()->getStorage("taxonomy_term")->loadTree($term->getVocabularyId(), $tid, $depth);
+        $term = $this->termStorage->load($tid);
+        $tree = $this->termStorage->loadTree($term->getVocabularyId(), $tid, $depth);
         $descendant_tids[] = array_merge([$tid], array_map(function ($value) { return $value->id(); }, $tree));
       }
 
@@ -190,13 +171,13 @@ class NodeOrderManager {
 
       if ($pager) {
         if ($count == -1) {
-          $count = \Drupal::config('nodeorder.settings')->get('default_nodes_main');
+          $count = $this->configFactory->get('nodeorder.settings')->get('default_nodes_main');
         }
         $result = pager_query($sql, $count, 0, $sql_count, $args);
       }
       else {
         if ($count == -1) {
-          $count = \Drupal::config('nodeorder.settings')->get('feed_default_items');
+          $count = $this->configFactory->get('nodeorder.settings')->get('feed_default_items');
         }
 
         if ($count == 0) {
@@ -214,15 +195,9 @@ class NodeOrderManager {
   }
 
   /**
-   * Determine if a given node can be ordered in any vocabularies.
-   *
-   * @param \Drupal\node\NodeInterface
-   *   The node object.
-   *
-   * @return bool
-   *   Returns TRUE if the node has terms in any orderable vocabulary.
+   * {@inheritdoc}
    */
-  public static function canBeOrdered(NodeInterface $node) {
+  public function canBeOrdered(NodeInterface $node) {
     $cid = 'nodeorder:can_be_ordered:' . $node->getType();
 
     if (($cache = \Drupal::cache()->get($cid)) && !empty($cache->data)) {
@@ -256,22 +231,9 @@ class NodeOrderManager {
   }
 
   /**
-   * Get a list of term IDs on a node that can be ordered.
-   *
-   * This method uses the `taxonomy_index` table to determine which terms on a
-   * node are orderable.
-   *
-   * @see self::getOrderableTidsFromNode()
-   *
-   * @param \Drupal\node\NodeInterface
-   *   The node to check for orderable term IDs.
-   * @param bool
-   *   Flag to reset cached data.
-   *
-   * @return int[]
-   *   Returns an array of the node's tids that are in orderable vocabularies.
+   * {@inheritdoc}
    */
-  public static function getOrderableTids(NodeInterface $node, $reset = FALSE) {
+  public function getOrderableTids(NodeInterface $node, $reset = FALSE) {
     $cid = 'nodeorder:orderable_tids:' . $node->getType();
 
     if (!$reset && ($cache = \Drupal::cache()->get($cid)) && !empty($cache->data)) {
@@ -279,7 +241,7 @@ class NodeOrderManager {
     }
     else {
       $vocabularies = [];
-      foreach (\Drupal::config('nodeorder.settings')->get('vocabularies') as $vid => $orderable) {
+      foreach ($this->configFactory->get('nodeorder.settings')->get('vocabularies') as $vid => $orderable) {
         if ($orderable) {
           $vocabularies[] = $vid;
         }
@@ -304,19 +266,9 @@ class NodeOrderManager {
   }
 
   /**
-   * Get all term IDs on a node that are on orderable vocabularies.
-   *
-   * Returns an array of the node's tids that are in orderable vocabularies.
-   * Slower than self::getOrderableTids() but needed when tids have already been
-   * removed from the database.
-   *
-   * @param \Drupal\node\NodeInterface
-   *   The node to find term IDs for.
-   *
-   * @return int[]
-   *   An array of term IDs.
+   * {@inheritdoc}
    */
-  public static function getOrderableTidsFromNode(NodeInterface $node) {
+  public function getOrderableTidsFromNode(NodeInterface $node) {
     $tids = [];
     foreach ($node->getFieldDefinitions() as $field) {
       if ($field->getType() == 'entity_reference' && $field->getSetting('target_type') == 'taxonomy_term') {
@@ -339,14 +291,9 @@ class NodeOrderManager {
   }
 
   /**
-   * Reorder list in which the node is dropped.
-   *
-   * When a node is removed, recalculates the ordering for a given term ID
-   *
-   * @param int $tid
-   *   The term ID.
+   * {@inheritdoc}
    */
-  public static function handleListsDecrease($tid) {
+  public function handleListsDecrease($tid) {
     $taxonomy_nids = db_select('taxonomy_index', 'ti')
       ->fields('ti', array('nid'))
       ->condition('ti.tid', $tid)
@@ -356,7 +303,7 @@ class NodeOrderManager {
     if (!count($taxonomy_nids)) {
       return;
     }
-    $weights = static::getTermMinMax($tid, TRUE);
+    $weights = $this->getTermMinMax($tid, TRUE);
     $range_border = ceil(count($taxonomy_nids) / 2);
     // Out of range when one of both new list's border weights is corresponding range border.
     $border_out_of_range = ($weights['min'] < -$range_border || $weights['max'] > $range_border);
@@ -371,7 +318,7 @@ class NodeOrderManager {
         $weight ++;
       }
       // Make sure the weight cache is invalidated.
-      static::getTermMinMax($tid, TRUE);
+      $this->getTermMinMax($tid, TRUE);
     }
   }
 
